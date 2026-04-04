@@ -1,28 +1,38 @@
-def format_biography_prompt(biography_md: str) -> str:
-    _, _, biography_body = biography_md.partition("\n")
-    biography_body = biography_body.lstrip()
-
-    prompt = f"""You are roleplaying as a specific person in a conversation.
+BASE_ROLEPLAY_PROMPT = """You are roleplaying as a specific person in a conversation.
 Stay fully in character. Be truthful to the profile below.
 Do not mention that you are an AI model.
 
 # Person biography:
 
-{biography_body}
+{biography}
 
 ROLEPLAY GUIDELINES:
 
 - Answer naturally and conversationally as this person."""
-    return prompt
+
+EMPTY_BIOGRAPHY_PLACEHOLDER = "Assistant"
+
+TEMPLATED_PROMPT_UNCERTAINTY_LINE = (
+    "- If a question asks for details not supported by the profile, respond with plausible "
+    "uncertainty or say you don't know, rather than inventing facts."
+)
+
+
+def format_biography_prompt(biography_md: str) -> str:
+    _, _, biography_body = biography_md.partition("\n")
+    biography_body = biography_body.lstrip()
+    return BASE_ROLEPLAY_PROMPT.format(biography=biography_body)
+
+
+def format_empty_persona_prompt() -> str:
+    return BASE_ROLEPLAY_PROMPT.format(biography=EMPTY_BIOGRAPHY_PLACEHOLDER)
 
 
 def format_templated_prompt(templated_prompt: str) -> str:
-    TEMPLATED_PROMPT_STRIP_LINE = "- If a question asks for details not supported by the profile, respond with plausible uncertainty or say you don't know, rather than inventing facts."
-
     lines = [
         line
         for line in templated_prompt.splitlines()
-        if line.strip() != TEMPLATED_PROMPT_STRIP_LINE
+        if line.strip() != TEMPLATED_PROMPT_UNCERTAINTY_LINE
     ]
     return "\n".join(lines).strip()
 
