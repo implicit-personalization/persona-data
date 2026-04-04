@@ -45,6 +45,7 @@ class PersonaGuessDataset:
                 )
                 for d in (json.loads(line) for line in f)
             ]
+        self._games_by_id: dict[str, GameRecord] = {g.game_id: g for g in self._games}
 
     def __repr__(self) -> str:
         return f"PersonaGuessDataset(n_games={len(self._games)})"
@@ -61,7 +62,7 @@ class PersonaGuessDataset:
     def get_qa(
         self, game_id: str, player: Literal["A", "B"] | None = None
     ) -> list[Turn]:
-        game = next(g for g in self._games if g.game_id == game_id)
+        game = self._games_by_id[game_id]
         return [t for t in game.turns if player is None or t.asker == player]
 
     def questions(

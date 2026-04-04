@@ -39,7 +39,7 @@ def _supports_system_role(tokenizer) -> bool:
         return False
 
 
-def _normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+def normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """Merge any leading system message into the first user message.
 
     Only needed when the tokenizer's chat template doesn't support
@@ -72,7 +72,7 @@ def format_messages(messages: list[dict[str, str]], tokenizer) -> tuple[str, int
     """
     supports_system = _supports_system_role(tokenizer)
     if not supports_system:
-        messages = _normalize_messages(messages)
+        messages = normalize_messages(messages)
 
     full_prompt = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=False
