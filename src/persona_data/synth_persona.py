@@ -4,8 +4,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Literal
 
-from huggingface_hub import hf_hub_download
-
 
 @dataclass
 class QAPair:
@@ -72,36 +70,25 @@ class PersonaData:
         return f"PersonaData(id={self.id!r}, name={self.name!r})"
 
 
-class SynthPersonaDataset:
-    """SynthPersona dataset loaded from HuggingFace."""
+class PersonaDataset:
+    """Persona dataset loaded from local JSONL files."""
 
-    def __init__(self, hf_repo: str = "implicit-personalization/synth-persona") -> None:
-        # Download both files (HF Hub caches locally under HF_HOME so repeat runs are instant).
-        personas_path = Path(
-            hf_hub_download(hf_repo, "dataset_personas.jsonl", repo_type="dataset")
-        )
-        qa_path = Path(
-            hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset")
-        )
-
+    def __init__(self, personas_path: Path | str, qa_path: Path | str) -> None:
+        self._personas: list[PersonaData] = []
         with open(personas_path) as f:
-            self._personas: list[PersonaData] = []
             for line in f:
+                if not line.strip():
+                    continue
                 d = json.loads(line)
-                # Parse sections if present
-                sections = []
-                for sec in d.get("sections", []):
-                    paragraphs = sec.get("paragraphs", [])
-                    text = "\n\n".join(p["text"] for p in paragraphs)
-                    sections.append(
-                        BiographySection(
-                            section_id=sec["section_id"],
-                            category=sec["category"],
-                            title=sec["title"],
-                            text=text,
-                        )
+                sections = [
+                    BiographySection(
+                        section_id=sec["section_id"],
+                        category=sec["category"],
+                        title=sec["title"],
+                        text="\n\n".join(p["text"] for p in sec.get("paragraphs", [])),
                     )
-
+                    for sec in d.get("sections", [])
+                ]
                 self._personas.append(
                     PersonaData(
                         id=d["id"],
@@ -115,6 +102,8 @@ class SynthPersonaDataset:
         self._qa: dict[str, list[QAPair]] = defaultdict(list)
         with open(qa_path) as f:
             for line in f:
+                if not line.strip():
+                    continue
                 d = json.loads(line)
                 self._qa[d["id"]].append(
                     QAPair(
@@ -129,7 +118,7 @@ class SynthPersonaDataset:
                 )
 
     def __repr__(self) -> str:
-        return f"SynthPersonaDataset(n_personas={len(self._personas)})"
+        return f"{type(self).__name__}(n_personas={len(self._personas)})"
 
     def __len__(self) -> int:
         return len(self._personas)
@@ -146,13 +135,7 @@ class SynthPersonaDataset:
         type: Literal["explicit", "implicit"] | None = None,
         difficulty: int | list[int] | None = None,
     ) -> list[QAPair]:
-        """Return QA pairs for a persona, optionally filtered by type and/or difficulty.
-
-        Args:
-            persona_id: The persona id to look up.
-            type: Keep only "explicit" or "implicit" pairs.
-            difficulty: Keep only pairs at this level (1/2/3) or list of levels.
-        """
+        """Return QA pairs for a persona, optionally filtered by type and/or difficulty."""
         pairs = self._qa.get(persona_id, [])
         if type is not None:
             pairs = [p for p in pairs if p.type == type]
@@ -169,3 +152,18 @@ class SynthPersonaDataset:
     ) -> list[str]:
         """Like get_qa but returns question strings only."""
         return [qa.question for qa in self.get_qa(persona_id, type, difficulty)]
+
+
+class SynthPersonaDataset(PersonaDataset):
+    """SynthPersona dataset loaded from HuggingFace."""
+
+    def __init__(self, hf_repo: str = "implicit-personalization/synth-persona") -> None:
+        from huggingface_hub import hf_hub_download
+
+        # HF Hub caches locally under HF_HOME so repeat runs are instant.
+        super().__init__(
+            personas_path=hf_hub_download(
+                hf_repo, "dataset_personas.jsonl", repo_type="dataset"
+            ),
+            qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
+        )
