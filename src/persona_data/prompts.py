@@ -1,40 +1,44 @@
-BASE_ROLEPLAY_PROMPT = """You are roleplaying as a specific person in a conversation.
+from persona_data.synth_persona import QAPair
+
+_LETTERS = "ABCDE"
+
+BASE_ROLEPLAY_PROMPT = """\
+You are roleplaying as a specific person in a conversation.
 Stay fully in character. Be truthful to the profile below.
 Do not mention that you are an AI model.
 
-# Person biography:
+# Person profile:
 
-{biography}
+{persona}
 
 ROLEPLAY GUIDELINES:
 
 - Answer naturally and conversationally as this person."""
 
-EMPTY_BIOGRAPHY_PLACEHOLDER = "Assistant"
-
-TEMPLATED_PROMPT_UNCERTAINTY_LINE = (
-    "- If a question asks for details not supported by the profile, respond with plausible "
-    "uncertainty or say you don't know, rather than inventing facts."
-)
+EMPTY_PERSONA_PLACEHOLDER = "Assistant"
+MC_ANSWER_ONLY_INSTRUCTION = "Answer only with the correct choice label (A, B, C, ...)."
 
 
-def format_biography_prompt(biography_md: str) -> str:
-    _, _, biography_body = biography_md.partition("\n")
-    biography_body = biography_body.lstrip()
-    return BASE_ROLEPLAY_PROMPT.format(biography=biography_body)
+def format_roleplay_prompt(persona: str = EMPTY_PERSONA_PLACEHOLDER) -> str:
+    """System prompt using any persona view."""
+    return BASE_ROLEPLAY_PROMPT.format(persona=persona)
 
 
-def format_empty_persona_prompt() -> str:
-    return BASE_ROLEPLAY_PROMPT.format(biography=EMPTY_BIOGRAPHY_PLACEHOLDER)
+def format_mc_prompt(prompt: str) -> str:
+    """Append the multiple-choice answer constraint to any prompt."""
+    return f"{prompt.rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
 
 
-def format_templated_prompt(templated_prompt: str) -> str:
-    lines = [
-        line
-        for line in templated_prompt.splitlines()
-        if line.strip() != TEMPLATED_PROMPT_UNCERTAINTY_LINE
-    ]
-    return "\n".join(lines).strip()
+def _format_mc_question_prompt(qa: QAPair) -> str:
+    lines = [qa.question, ""]
+    for i, choice in enumerate(qa.choices):
+        lines.append(f"{_LETTERS[i]}. {choice}")
+    return "\n".join(lines)
+
+
+def format_mc_question(qa: QAPair) -> str:
+    """Format an MC question with lettered choices for model evaluation."""
+    return format_mc_prompt(_format_mc_question_prompt(qa))
 
 
 def _supports_system_role(tokenizer) -> bool:

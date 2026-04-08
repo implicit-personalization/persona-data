@@ -4,6 +4,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Literal
 
+# NOTE: Bank/provisional question-family metadata is intentionally omitted for now.
+# The loader keeps only persona records and per-persona QA pairs to stay simple.
+
 
 @dataclass
 class QAPair:
@@ -12,11 +15,26 @@ class QAPair:
     question: str
     answer: str
     difficulty: int  # 1 = easy, 2 = medium, 3 = hard
+    answer_format: str = ""  # "free_text" or "choice"
+    choices: list[str] = field(default_factory=list)
+    correct_choice_index: int | None = None
     tags: list[str] = field(default_factory=list)
     validation: dict | None = None
 
     def __repr__(self):
         return f"QAPair(qid={self.qid!r}, type={self.type!r}, difficulty={self.difficulty})"
+
+
+@dataclass
+class Statement:
+    sid: str
+    category: str
+    claim: str
+    support: list[dict] = field(default_factory=list)
+    confidence: str = ""
+
+    def __repr__(self):
+        return f"Statement(sid={self.sid!r}, category={self.category!r})"
 
 
 @dataclass
@@ -36,9 +54,12 @@ class BiographySection:
 class PersonaData:
     id: str
     persona: dict
-    templated_prompt: str
-    biography_md: str
+    templated_view: str
+    biography_view: str
+    statements_view: str = ""
+    # transcript: str = "" # NOTE: This is not needed for our usecase for now
     sections: list[BiographySection] = field(default_factory=list)
+    statements: list[Statement] = field(default_factory=list)
 
     @property
     def name(self) -> str:
@@ -75,6 +96,7 @@ class PersonaDataset:
 
     def __init__(self, personas_path: Path | str, qa_path: Path | str) -> None:
         self._personas: list[PersonaData] = []
+        self._personas_by_id: dict[str, PersonaData] = {}
         with open(personas_path) as f:
             for line in f:
                 if not line.strip():
@@ -89,15 +111,26 @@ class PersonaDataset:
                     )
                     for sec in d.get("sections", [])
                 ]
-                self._personas.append(
-                    PersonaData(
-                        id=d["id"],
-                        persona=d["persona"],
-                        templated_prompt=d["templated_prompt"],
-                        biography_md=d["biography_md"],
-                        sections=sections,
-                    )
+                persona = PersonaData(
+                    id=d["id"],
+                    persona=d["persona"],
+                    templated_view=d["templated_view"],
+                    biography_view=d.get("biography_view", ""),
+                    statements_view=d.get("statements_view", ""),
+                    sections=sections,
+                    statements=[
+                        Statement(
+                            sid=s["sid"],
+                            category=s["category"],
+                            claim=s["claim"],
+                            support=s.get("support", []),
+                            confidence=s.get("confidence", ""),
+                        )
+                        for s in d.get("statements", [])
+                    ],
                 )
+                self._personas.append(persona)
+                self._personas_by_id[persona.id] = persona
 
         self._qa: dict[str, list[QAPair]] = defaultdict(list)
         with open(qa_path) as f:
@@ -112,6 +145,9 @@ class PersonaDataset:
                         question=d["question"],
                         answer=d["answer"],
                         difficulty=d["difficulty"],
+                        answer_format=d.get("answer_format", "free_text"),
+                        choices=d.get("choices", []),
+                        correct_choice_index=d.get("correct_choice_index"),
                         tags=d.get("tags", []),
                         validation=d.get("validation"),
                     )
@@ -128,6 +164,9 @@ class PersonaDataset:
 
     def __getitem__(self, idx: int) -> PersonaData:
         return self._personas[idx]
+
+    def get_persona(self, persona_id: str) -> PersonaData | None:
+        return self._personas_by_id.get(persona_id)
 
     def get_qa(
         self,
