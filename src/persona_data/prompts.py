@@ -1,3 +1,5 @@
+from typing import Literal
+
 from persona_data.synth_persona import QAPair
 
 _LETTERS = "ABCDE"
@@ -7,26 +9,35 @@ You are roleplaying as a specific person in a conversation.
 Stay fully in character. Be truthful to the profile below.
 Do not mention that you are an AI model.
 
-# Person profile:
+### Person profile:
 
-{persona}
+{persona}"""
 
-ROLEPLAY GUIDELINES:
-
-- Answer naturally and conversationally as this person."""
+_CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this person."
 
 EMPTY_PERSONA_PLACEHOLDER = "Assistant"
 MC_ANSWER_ONLY_INSTRUCTION = "Answer only with the correct choice label (A, B, C, ...)."
+PromptMode = Literal["roleplay", "conversational", "mc"]
 
 
-def format_roleplay_prompt(persona: str = EMPTY_PERSONA_PLACEHOLDER) -> str:
-    """System prompt using any persona view."""
-    return BASE_ROLEPLAY_PROMPT.format(persona=persona)
+def format_roleplay_prompt(
+    persona: str = EMPTY_PERSONA_PLACEHOLDER, mode: PromptMode = "roleplay"
+) -> str:
+    """System prompt using any persona view.
 
-
-def format_mc_prompt(prompt: str) -> str:
-    """Append the multiple-choice answer constraint to any prompt."""
-    return f"{prompt.rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
+    Args:
+        persona: The persona text (templated or biography view).
+        mode: Prompt style selector.
+            - "roleplay": plain persona prompt
+            - "conversational": persona prompt with a natural chat instruction
+            - "mc": persona prompt with a multiple-choice answer constraint
+    """
+    base = BASE_ROLEPLAY_PROMPT.format(persona=persona)
+    if mode == "conversational":
+        return base + _CONVERSATIONAL_SUFFIX
+    if mode == "mc":
+        return f"{base.rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
+    return base
 
 
 def _format_mc_question_prompt(qa: QAPair) -> str:
@@ -38,7 +49,7 @@ def _format_mc_question_prompt(qa: QAPair) -> str:
 
 def format_mc_question(qa: QAPair) -> str:
     """Format an MC question with lettered choices for model evaluation."""
-    return format_mc_prompt(_format_mc_question_prompt(qa))
+    return f"{_format_mc_question_prompt(qa).rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
 
 
 def mc_correct_letter(qa: QAPair) -> str:

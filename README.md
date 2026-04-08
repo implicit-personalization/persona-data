@@ -41,7 +41,7 @@ src/persona_data/
 ├── __init__.py
 ├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
-├── prompts.py             # format_roleplay_prompt, format_mc_prompt, format_messages
+├── prompts.py             # format_roleplay_prompt, format_mc_question, format_messages
 └── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
 ```
 
@@ -91,6 +91,8 @@ messages = [
 ]
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
+
+`format_roleplay_prompt` supports `mode="roleplay"` (default), `mode="conversational"`, and `mode="mc"`.
 
 `format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message.
 

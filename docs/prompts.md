@@ -20,6 +20,12 @@ system_prompt = format_roleplay_prompt(persona.biography_view)
 
 The resulting system prompt instructs the model to stay in character and not reveal it is an AI.
 
+`format_roleplay_prompt` also accepts a `mode` argument:
+
+- `mode="roleplay"` for the plain persona prompt
+- `mode="conversational"` to add a natural chat instruction
+- `mode="mc"` to add the multiple-choice answer constraint
+
 ### Building the message list
 
 Pass the system prompt as the first message, then alternate user/assistant turns normally:
@@ -81,7 +87,7 @@ question_prompt = format_mc_question(qa)
 correct         = mc_correct_letter(qa)
 ```
 
-`format_mc_question` renders the question body, lettered choices (A, B, C, …), and a trailing instruction telling the model to reply with only the choice label:
+`format_mc_question` renders the question body, lettered choices (A, B, C, …), and appends a trailing instruction telling the model to reply with only the choice label:
 
 ```
 What is Ethan's primary occupation?
