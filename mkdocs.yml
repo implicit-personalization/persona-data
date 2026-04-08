@@ -3,5 +3,32 @@ repo_url: https://github.com/implicit-personalization/persona-data
 docs_dir: docs
 theme:
   name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  font:
+    text: Inter
+    code: JetBrains Mono
+  features:
+    - content.code.copy
+
+markdown_extensions:
+  - pymdownx.highlight
+  - pymdownx.superfences
+
 nav:
-  - Datasets: datasets.md
+  - Overview: index.md
+  - SynthPersona: synth_persona.md
+  - PersonaGuess: persona_guess.md
+  - Prompt Formatting: prompts.md
+  - Adding a Dataset: adding-a-dataset.md

@@ -1,6 +1,6 @@
 # persona-data
 
-[![Docs](https://img.shields.io/badge/docs-view-purple?logo=github)](https://github.com/implicit-personalization/persona-data/tree/main/docs)
+[![Docs](https://img.shields.io/badge/docs-view-purple?logo=materialformkdocs)](https://implicit-personalization.github.io/persona-data/)
 
 Shared dataset loading, prompt formatting, and environment utilities for the [implicit-personalization](https://github.com/implicit-personalization) projects.
 
