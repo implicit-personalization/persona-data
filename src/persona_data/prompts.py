@@ -41,6 +41,13 @@ def format_mc_question(qa: QAPair) -> str:
     return format_mc_prompt(_format_mc_question_prompt(qa))
 
 
+def mc_correct_letter(qa: QAPair) -> str:
+    """Return the letter (A–E) for the correct choice of an MC question."""
+    if qa.correct_choice_index is None:
+        raise ValueError(f"QAPair {qa.qid!r} has no correct_choice_index")
+    return _LETTERS[qa.correct_choice_index]
+
+
 def _supports_system_role(tokenizer) -> bool:
     """Check if tokenizer's chat template supports the 'system' role."""
     try:

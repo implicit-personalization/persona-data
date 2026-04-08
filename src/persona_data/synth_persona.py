@@ -4,8 +4,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Literal
 
-# NOTE: Bank/provisional question-family metadata is intentionally omitted for now.
-# The loader keeps only persona records and per-persona QA pairs to stay simple.
+# NOTE: The loader intentionally drops provenance/curation fields that are not used
+# by persona-data, persona-ui, or persona-vectors. We keep `evidence_sids` because
+# the ablation tooling still relies on it.
+# Dropped fields: design_notes, family_name, source_candidate_*, bank_id, axis,
+# curation_note, validation, evidence_claims, evidence_quotes.
 
 
 @dataclass
@@ -18,8 +21,8 @@ class QAPair:
     answer_format: str = ""  # "free_text" or "choice"
     choices: list[str] = field(default_factory=list)
     correct_choice_index: int | None = None
+    evidence_sids: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
-    validation: dict | None = None
 
     def __repr__(self):
         return f"QAPair(qid={self.qid!r}, type={self.type!r}, difficulty={self.difficulty})"
@@ -148,8 +151,8 @@ class PersonaDataset:
                         answer_format=d.get("answer_format", "free_text"),
                         choices=d.get("choices", []),
                         correct_choice_index=d.get("correct_choice_index"),
+                        evidence_sids=d.get("evidence_sids", []),
                         tags=d.get("tags", []),
-                        validation=d.get("validation"),
                     )
                 )
 
