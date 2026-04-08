@@ -1,6 +1,17 @@
 # persona-data
 
+[![Docs](https://img.shields.io/badge/docs-view-purple?logo=github)](https://github.com/implicit-personalization/persona-data/tree/main/docs)
+
 Shared dataset loading, prompt formatting, and environment utilities for the [implicit-personalization](https://github.com/implicit-personalization) projects.
+
+## Overview
+
+`persona-data` provides the common dataset and prompt helpers used across the persona projects:
+
+- `SynthPersonaDataset` for persona profiles plus QA pairs
+- `PersonaGuessDataset` for turn-based persona games
+- prompt helpers for roleplay and multiple-choice evaluation
+- environment helpers for seeds, devices, and artifact paths
 
 ## Installation
 
@@ -26,17 +37,17 @@ persona-data = { path = "../persona-data", editable = true }
 ## Package layout
 
 ```
-persona_data/
-├── __init__.py            # empty
-├── synth_persona.py       # SynthPersonaDataset, PersonaData, QAPair, BiographySection
+src/persona_data/
+├── __init__.py
+├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
-├── prompts.py             # format_biography_prompt, format_templated_prompt, format_messages
+├── prompts.py             # format_roleplay_prompt, format_mc_prompt, format_messages
 └── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
 ```
 
 ## Datasets
 
-Each dataset is a module with its own types and a loader that downloads from HuggingFace (cached via `HF_HOME`). See [docs/datasets.md](docs/datasets.md) for the full guide on adding new datasets.
+Each dataset is a module with its own types and a loader that downloads from Hugging Face, cached via `HF_HOME`.
 
 ### SynthPersona
 
@@ -47,8 +58,8 @@ dataset = SynthPersonaDataset()
 
 persona = dataset[0]
 persona.name              # "Ethan Robinson"
-persona.biography_md      # full markdown biography
-persona.templated_prompt  # short attribute-based system prompt
+persona.templated_view    # short attribute-based system prompt
+persona.biography_view    # full biography text
 persona.sections          # list of BiographySection
 
 qa_pairs = dataset.get_qa(persona.id, type="implicit", difficulty=[1, 2])
@@ -63,14 +74,15 @@ from persona_data.persona_guess import PersonaGuessDataset
 games = PersonaGuessDataset()
 game = games[0]
 turns = games.get_qa(game.game_id, player="A")
+questions = games.questions(game.game_id, player="B")
 ```
 
 ## Prompt formatting
 
 ```python
-from persona_data.prompts import format_biography_prompt, format_messages
+from persona_data.prompts import format_messages, format_roleplay_prompt
 
-system_prompt = format_biography_prompt(persona.biography_md)
+system_prompt = format_roleplay_prompt(persona.biography_view)
 
 messages = [
     {"role": "system", "content": system_prompt},
@@ -80,7 +92,9 @@ messages = [
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
-`format_messages` handles tokenizers that don't support the `"system"` role (e.g. Gemma 2) by merging system content into the first user message.
+`format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message.
+
+For multiple-choice evaluation, use `format_mc_question(qa)` and `mc_correct_letter(qa)`.
 
 ## Environment helpers
 
@@ -92,9 +106,6 @@ set_seed(1337)        # sets random, numpy, and torch seeds
 device = get_device() # cuda > mps > cpu
 ```
 
-## Docs
-
-- [docs/datasets.md](docs/datasets.md) — dataset loading guide and template for adding new datasets
 
 ## Used by
 

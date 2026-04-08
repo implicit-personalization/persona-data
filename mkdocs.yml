@@ -1,0 +1,7 @@
+site_name: persona-data
+repo_url: https://github.com/implicit-personalization/persona-data
+docs_dir: docs
+theme:
+  name: material
+nav:
+  - Datasets: datasets.md
