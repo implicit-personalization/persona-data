@@ -1,52 +1,48 @@
 from __future__ import annotations
 
-import json
 import re
-import urllib.parse
-import urllib.request
-from typing import Any
+from typing import Any, Iterator
+
+import pyarrow.parquet as pq
+from huggingface_hub import hf_hub_download, list_repo_files
 
 from persona_data.synth_persona import PersonaData
 
-_ROWS_API = "https://datasets-server.huggingface.co/rows"
-_MAX_ROWS_PER_REQUEST = 100
-_NAME_RE = re.compile(
-    r"^\s*([A-ZÀ-ÖØ-Þ][\w'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\w'’.-]+){1,3})\b"
-)
+_NAME_RE = re.compile(r"^\s*([A-ZÀ-ÖØ-Þ][\w'’.-]+(?:\s+[A-ZÀ-ÖØ-Þ][\w'’.-]+){1,3})\b")
 
 
-def _fetch_rows(
-    *,
-    hf_repo: str,
-    config: str,
-    split: str,
-    offset: int,
-    length: int,
-) -> list[dict[str, Any]]:
+def _list_parquet_files(hf_repo: str) -> tuple[str, ...]:
+    return tuple(
+        sorted(
+            file_name
+            for file_name in list_repo_files(hf_repo, repo_type="dataset")
+            if file_name.startswith("data/train-") and file_name.endswith(".parquet")
+        )
+    )
+
+
+def _fetch_rows(*, hf_repo: str, offset: int, length: int) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     remaining = length
     current_offset = offset
 
-    while remaining > 0:
-        batch_size = min(remaining, _MAX_ROWS_PER_REQUEST)
-        params = urllib.parse.urlencode(
-            {
-                "dataset": hf_repo,
-                "config": config,
-                "split": split,
-                "offset": current_offset,
-                "length": batch_size,
-            }
+    for file_name in _list_parquet_files(hf_repo):
+        parquet_file = pq.ParquetFile(
+            hf_hub_download(hf_repo, file_name, repo_type="dataset")
         )
-        url = f"{_ROWS_API}?{params}"
-        with urllib.request.urlopen(url, timeout=60) as response:
-            payload = json.load(response)
-        batch_rows = [dict(item["row"]) for item in payload.get("rows", [])]
-        rows.extend(batch_rows)
-        if len(batch_rows) < batch_size:
+        file_rows = parquet_file.metadata.num_rows
+
+        if current_offset >= file_rows:
+            current_offset -= file_rows
+            continue
+
+        batch_size = min(remaining, file_rows - current_offset)
+        batch_rows = parquet_file.read().slice(current_offset, batch_size).to_pylist()
+        rows.extend(dict(row) for row in batch_rows)
+        remaining -= len(batch_rows)
+        current_offset = 0
+        if remaining <= 0:
             break
-        current_offset += batch_size
-        remaining -= batch_size
 
     return rows
 
@@ -92,8 +88,7 @@ def _templated_view(row: dict[str, Any], display_name: str) -> str:
         f"Skills and expertise: {row.get('skills_and_expertise', '')}".strip(),
         f"Hobbies and interests: {row.get('hobbies_and_interests', '')}".strip(),
         (
-            "Career goals and ambitions: "
-            f"{row.get('career_goals_and_ambitions', '')}"
+            f"Career goals and ambitions: {row.get('career_goals_and_ambitions', '')}"
         ).strip(),
     ]
     return "\n".join(line for line in lines if line.strip())
@@ -115,60 +110,32 @@ def _row_to_persona(row: dict[str, Any]) -> PersonaData:
     )
 
 
-class NemotronPersonasDataset:
-    """Sampled persona-only view over a Nemotron Personas dataset on Hugging Face."""
+class NemotronPersonasFranceDataset:
+    """French persona-only dataset backed by `nvidia/Nemotron-Personas-France`."""
 
+    DEFAULT_REPO = "nvidia/Nemotron-Personas-France"
     supports_qa = False
 
     def __init__(
         self,
-        hf_repo: str,
+        hf_repo: str = DEFAULT_REPO,
         *,
-        config: str = "default",
-        split: str = "train",
         sample_size: int = 200,
         offset: int = 0,
         rows: list[dict[str, Any]] | None = None,
     ) -> None:
         self.hf_repo = hf_repo
-        self.config = config
-        self.split = split
         self.sample_size = sample_size
         self.offset = offset
         if rows is None:
-            rows = _fetch_rows(
-                hf_repo=hf_repo,
-                config=config,
-                split=split,
-                offset=offset,
-                length=sample_size,
-            )
+            rows = _fetch_rows(hf_repo=hf_repo, offset=offset, length=sample_size)
         self._personas = [_row_to_persona(row) for row in rows]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
-
-    @classmethod
-    def from_rows(
-        cls,
-        rows: list[dict[str, Any]],
-        *,
-        hf_repo: str = "local/test",
-        config: str = "default",
-        split: str = "train",
-        offset: int = 0,
-    ) -> "NemotronPersonasDataset":
-        return cls(
-            hf_repo=hf_repo,
-            config=config,
-            split=split,
-            sample_size=len(rows),
-            offset=offset,
-            rows=rows,
-        )
 
     def __len__(self) -> int:
         return len(self._personas)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[PersonaData]:
         return iter(self._personas)
 
     def __getitem__(self, idx: int) -> PersonaData:
@@ -181,26 +148,4 @@ class NemotronPersonasDataset:
         return (
             f"{type(self).__name__}(hf_repo={self.hf_repo!r}, "
             f"sample_size={len(self._personas)}, offset={self.offset})"
-        )
-
-
-class NemotronPersonasFranceDataset(NemotronPersonasDataset):
-    """French persona-only dataset backed by nvidia/Nemotron-Personas-France."""
-
-    DEFAULT_REPO = "nvidia/Nemotron-Personas-France"
-
-    def __init__(
-        self,
-        *,
-        config: str = "default",
-        split: str = "train",
-        sample_size: int = 200,
-        offset: int = 0,
-    ) -> None:
-        super().__init__(
-            self.DEFAULT_REPO,
-            config=config,
-            split=split,
-            sample_size=sample_size,
-            offset=offset,
         )
