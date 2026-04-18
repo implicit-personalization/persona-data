@@ -121,14 +121,12 @@ class NemotronPersonasFranceDataset:
         hf_repo: str = DEFAULT_REPO,
         *,
         sample_size: int = 200,
-        offset: int = 0,
         rows: list[dict[str, Any]] | None = None,
     ) -> None:
         self.hf_repo = hf_repo
         self.sample_size = sample_size
-        self.offset = offset
         if rows is None:
-            rows = _fetch_rows(hf_repo=hf_repo, offset=offset, length=sample_size)
+            rows = _fetch_rows(hf_repo=hf_repo, offset=0, length=sample_size)
         self._personas = [_row_to_persona(row) for row in rows]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
 
@@ -147,5 +145,5 @@ class NemotronPersonasFranceDataset:
     def __repr__(self) -> str:
         return (
             f"{type(self).__name__}(hf_repo={self.hf_repo!r}, "
-            f"sample_size={len(self._personas)}, offset={self.offset})"
+            f"sample_size={len(self._personas)})"
         )

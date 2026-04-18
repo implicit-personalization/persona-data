@@ -45,5 +45,5 @@ It also exposes `name` as a derived property.
 ## Notes
 
 - The dataset is persona-only and does not include QA pairs.
-- `sample_size` and `offset` let you load a small slice for notebook use.
+- `sample_size` can limit how many personas are kept in memory.
 - The loader derives `first_name` and `last_name` from the persona text when possible.

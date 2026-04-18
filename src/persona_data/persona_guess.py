@@ -33,18 +33,26 @@ class PersonaGuessDataset:
 
     DEFAULT_REPO = "implicit-personalization/persona-guess"
 
-    def __init__(self, hf_repo: str = DEFAULT_REPO) -> None:
+    def __init__(
+        self, hf_repo: str = DEFAULT_REPO, *, sample_size: int | None = None
+    ) -> None:
         path = Path(hf_hub_download(hf_repo, "games.jsonl", repo_type="dataset"))
         with open(path) as f:
-            self._games: list[GameRecord] = [
-                GameRecord(
-                    game_id=d["game_id"],
-                    persona_a_id=d["persona_a_id"],
-                    persona_b_id=d["persona_b_id"],
-                    turns=[Turn(**t) for t in d["turns"]],
+            self._games: list[GameRecord] = []
+            for line in f:
+                if not line.strip():
+                    continue
+                if sample_size is not None and len(self._games) >= sample_size:
+                    break
+                d = json.loads(line)
+                self._games.append(
+                    GameRecord(
+                        game_id=d["game_id"],
+                        persona_a_id=d["persona_a_id"],
+                        persona_b_id=d["persona_b_id"],
+                        turns=[Turn(**t) for t in d["turns"]],
+                    )
                 )
-                for d in (json.loads(line) for line in f)
-            ]
         self._games_by_id: dict[str, GameRecord] = {g.game_id: g for g in self._games}
 
     def __repr__(self) -> str:

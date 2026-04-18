@@ -74,6 +74,9 @@ def main() -> None:
         assert synth.get_qa("p1")[0].question == "Who is it?"
         assert synth[0].sections[0].text == "Worked on math."
 
+        synth_sampled = PersonaDataset(personas_path, qa_path, sample_size=0)
+        assert len(synth_sampled) == 0
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         shard_1 = tmp / "train-00000-of-00002.parquet"
@@ -158,15 +161,64 @@ def main() -> None:
                 ),
             ),
         ):
-            nemotron = NemotronPersonasFranceDataset(sample_size=2, offset=1)
+            nemotron = NemotronPersonasFranceDataset(sample_size=2)
             assert len(nemotron) == 2
-            assert nemotron[0].name == "Marie Curie"
-            assert nemotron[1].name == "Sophie Germain"
+            assert nemotron[0].name == "Ada Lovelace"
+            assert nemotron[1].name == "Marie Curie"
             assert nemotron.get_persona("p2").templated_view.startswith(
                 "Name: Marie Curie"
             )
             assert "Career goals and ambitions" in nemotron[0].templated_view
             assert nemotron.supports_qa is False
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        games_path = tmp / "games.jsonl"
+        games_path.write_text(
+            "\n".join(
+                [
+                    json.dumps(
+                        {
+                            "game_id": "g1",
+                            "persona_a_id": "pa",
+                            "persona_b_id": "pb",
+                            "turns": [
+                                {
+                                    "round": 1,
+                                    "asker": "A",
+                                    "question": "Q1",
+                                    "answer": "A1",
+                                }
+                            ],
+                        }
+                    ),
+                    json.dumps(
+                        {
+                            "game_id": "g2",
+                            "persona_a_id": "pc",
+                            "persona_b_id": "pd",
+                            "turns": [
+                                {
+                                    "round": 1,
+                                    "asker": "B",
+                                    "question": "Q2",
+                                    "answer": "A2",
+                                }
+                            ],
+                        }
+                    ),
+                ]
+            )
+            + "\n"
+        )
+
+        with patch(
+            "persona_data.persona_guess.hf_hub_download", return_value=games_path
+        ):
+            games = PersonaGuessDataset(sample_size=1)
+            assert len(games) == 1
+            assert games[0].game_id == "g1"
+            assert games.get_qa("g1")[0].question == "Q1"
 
 
 if __name__ == "__main__":
