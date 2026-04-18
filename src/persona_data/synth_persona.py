@@ -97,13 +97,22 @@ class PersonaData:
 class PersonaDataset:
     """Persona dataset loaded from local JSONL files."""
 
-    def __init__(self, personas_path: Path | str, qa_path: Path | str) -> None:
+    def __init__(
+        self,
+        personas_path: Path | str,
+        qa_path: Path | str,
+        *,
+        sample_size: int | None = None,
+    ) -> None:
+        self.sample_size = sample_size
         self._personas: list[PersonaData] = []
         self._personas_by_id: dict[str, PersonaData] = {}
         with open(personas_path) as f:
             for line in f:
                 if not line.strip():
                     continue
+                if sample_size is not None and len(self._personas) >= sample_size:
+                    break
                 d = json.loads(line)
                 sections = [
                     BiographySection(
@@ -135,12 +144,15 @@ class PersonaDataset:
                 self._personas.append(persona)
                 self._personas_by_id[persona.id] = persona
 
+        loaded_ids = set(self._personas_by_id)
         self._qa: dict[str, list[QAPair]] = defaultdict(list)
         with open(qa_path) as f:
             for line in f:
                 if not line.strip():
                     continue
                 d = json.loads(line)
+                if d["id"] not in loaded_ids:
+                    continue
                 self._qa[d["id"]].append(
                     QAPair(
                         qid=d["qid"],
@@ -199,7 +211,12 @@ class PersonaDataset:
 class SynthPersonaDataset(PersonaDataset):
     """SynthPersona dataset loaded from HuggingFace."""
 
-    def __init__(self, hf_repo: str = "implicit-personalization/synth-persona") -> None:
+    def __init__(
+        self,
+        hf_repo: str = "implicit-personalization/synth-persona",
+        *,
+        sample_size: int | None = None,
+    ) -> None:
         from huggingface_hub import hf_hub_download
 
         # HF Hub caches locally under HF_HOME so repeat runs are instant.
@@ -208,4 +225,5 @@ class SynthPersonaDataset(PersonaDataset):
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
             ),
             qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
+            sample_size=sample_size,
         )

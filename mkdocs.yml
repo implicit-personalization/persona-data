@@ -30,5 +30,6 @@ nav:
   - Overview: index.md
   - SynthPersona: synth_persona.md
   - PersonaGuess: persona_guess.md
+  - Nemotron Personas France: nemotron_personas.md
   - Prompt Formatting: prompts.md
   - Adding a Dataset: adding-a-dataset.md
