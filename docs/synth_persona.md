@@ -53,6 +53,6 @@ questions = dataset.questions(persona.id, type="implicit")
 ## Notes
 
 - `difficulty` accepts one level or a list of levels.
-- `type` can be "explicit" or "implicit".
+- `type` can be `"explicit"` or `"implicit"`.
 - `sample_size` can limit how many personas are kept in memory.
 - The loader keeps the dataset eager and notebook-friendly rather than streaming.

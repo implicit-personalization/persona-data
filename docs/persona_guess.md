@@ -49,6 +49,6 @@ questions = games.questions(game.game_id, player="B")
 
 ## Notes
 
-- `player` can be "A", "B", or omitted for all turns.
+- `player` can be `"A"`, `"B"`, or omitted for all turns.
 - `sample_size` can limit how many games are kept in memory.
 - The dataset is small enough to load eagerly into memory.
