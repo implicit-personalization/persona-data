@@ -28,7 +28,6 @@ def _write_parquet(path: Path, rows: list[dict]) -> None:
 def main() -> None:
     assert get_device().type in {"cpu", "cuda", "mps"}
     assert format_roleplay_prompt("hello")
-    assert PersonaGuessDataset is not None
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

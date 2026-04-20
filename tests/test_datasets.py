@@ -19,8 +19,12 @@ from persona_data.nemotron_personas import (
     _split_name,
 )
 from persona_data.persona_guess import PersonaGuessDataset
-from persona_data.prompts import format_roleplay_prompt
-from persona_data.synth_persona import PersonaDataset
+from persona_data.prompts import (
+    format_mc_question,
+    format_roleplay_prompt,
+    mc_answer_only_instruction,
+)
+from persona_data.synth_persona import PersonaDataset, QAPair
 
 # --------------------------------------------------------------------------- #
 # environment / prompts                                                       #
@@ -33,6 +37,35 @@ def test_get_device_returns_known_kind():
 
 def test_format_roleplay_prompt_non_empty():
     assert format_roleplay_prompt("hello")
+
+
+def test_format_roleplay_prompt_rejects_unknown_mode():
+    with pytest.raises(ValueError):
+        format_roleplay_prompt("hello", mode="mc")
+
+
+def test_mc_answer_only_instruction_uses_actual_labels():
+    assert (
+        mc_answer_only_instruction(3)
+        == "Answer only with the correct choice label (A, B, C)."
+    )
+
+
+def test_format_mc_question_appends_instruction():
+    qa = QAPair(
+        qid="q1",
+        type="explicit",
+        question="Pick one?",
+        answer="Beta",
+        difficulty=1,
+        answer_format="choice",
+        choices=["Alpha", "Beta"],
+        correct_choice_index=1,
+    )
+
+    prompt = format_mc_question(qa)
+    assert prompt.startswith("Pick one?\n\nA. Alpha\nB. Beta")
+    assert prompt.endswith("Answer only with the correct choice label (A, B).")
 
 
 # --------------------------------------------------------------------------- #

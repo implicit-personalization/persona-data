@@ -2,7 +2,7 @@ from typing import Literal
 
 from persona_data.synth_persona import QAPair
 
-_LETTERS = "ABCDE"
+_LETTERS = "ABCDEFG"
 
 BASE_ROLEPLAY_PROMPT = """\
 You are roleplaying as a specific person in a conversation.
@@ -16,27 +16,36 @@ Do not mention that you are an AI model.
 _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this person."
 
 EMPTY_PERSONA_PLACEHOLDER = "Assistant"
-MC_ANSWER_ONLY_INSTRUCTION = "Answer only with the correct choice label (A, B, C, ...)."
-PromptMode = Literal["roleplay", "conversational", "mc"]
+PromptMode = Literal["roleplay", "conversational"]
+
+
+def mc_answer_only_instruction(n_choices: int) -> str:
+    """Return the trailing answer-only instruction for an MC prompt."""
+    if n_choices < 1 or n_choices > len(_LETTERS):
+        raise ValueError(f"n_choices={n_choices} outside [1, {len(_LETTERS)}]")
+    labels = ", ".join(_LETTERS[:n_choices])
+    return f"Answer only with the correct choice label ({labels})."
 
 
 def format_roleplay_prompt(
     persona: str = EMPTY_PERSONA_PLACEHOLDER, mode: PromptMode = "roleplay"
 ) -> str:
-    """System prompt using any persona view.
+    """Build a persona system prompt.
 
     Args:
         persona: The persona text (templated or biography view).
         mode: Prompt style selector.
             - "roleplay": plain persona prompt
             - "conversational": persona prompt with a natural chat instruction
-            - "mc": persona prompt with a multiple-choice answer constraint
+
+    Raises:
+        ValueError: If `mode` is not one of the supported values.
     """
     base = BASE_ROLEPLAY_PROMPT.format(persona=persona)
     if mode == "conversational":
         return base + _CONVERSATIONAL_SUFFIX
-    if mode == "mc":
-        return f"{base.rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
+    if mode != "roleplay":
+        raise ValueError(f"Unsupported mode: {mode!r}")
     return base
 
 
@@ -48,18 +57,19 @@ def _format_mc_question_prompt(qa: QAPair) -> str:
 
 
 def format_mc_question(qa: QAPair) -> str:
-    """Format an MC question with lettered choices for model evaluation."""
-    return f"{_format_mc_question_prompt(qa).rstrip()}\n\n{MC_ANSWER_ONLY_INSTRUCTION}"
+    """Format an MC question and append the answer-only instruction."""
+    instruction = mc_answer_only_instruction(len(qa.choices))
+    return f"{_format_mc_question_prompt(qa).rstrip()}\n\n{instruction}"
 
 
 def mc_correct_letter(qa: QAPair) -> str:
-    """Return the letter (A–E) for the correct choice of an MC question."""
+    """Return the label for the correct choice of an MC question."""
     if qa.correct_choice_index is None:
         raise ValueError(f"QAPair {qa.qid!r} has no correct_choice_index")
     return _LETTERS[qa.correct_choice_index]
 
 
-def _supports_system_role(tokenizer) -> bool:
+def supports_system_role(tokenizer) -> bool:
     """Check if tokenizer's chat template supports the 'system' role."""
     try:
         tokenizer.apply_chat_template(
@@ -102,7 +112,7 @@ def format_messages(messages: list[dict[str, str]], tokenizer) -> tuple[str, int
         response_start_idx: The token index of the first token in the last
                             assistant message.
     """
-    supports_system = _supports_system_role(tokenizer)
+    supports_system = supports_system_role(tokenizer)
     if not supports_system:
         messages = normalize_messages(messages)
 

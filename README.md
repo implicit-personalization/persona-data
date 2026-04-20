@@ -100,11 +100,13 @@ messages = [
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
-`format_roleplay_prompt` supports `mode="roleplay"` (default), `mode="conversational"`, and `mode="mc"`.
+`format_roleplay_prompt` supports `mode="roleplay"` (default) and `mode="conversational"`.
+
+For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 
 `format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message.
 
-For multiple-choice evaluation, use `format_mc_question(qa)` and `mc_correct_letter(qa)`.
+`supports_system_role(tokenizer)` checks that capability directly if you need to branch before formatting.
 
 ## Environment helpers
 

@@ -24,7 +24,8 @@ The resulting system prompt instructs the model to stay in character and not rev
 
 - `mode="roleplay"` for the plain persona prompt
 - `mode="conversational"` to add a natural chat instruction
-- `mode="mc"` to add the multiple-choice answer constraint
+
+For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
 
 ### Building the message list
 
@@ -58,6 +59,8 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 Tokenizers that do not support the `"system"` role (e.g. Gemma 2) are handled automatically — the system content is merged into the first user message.
 
+`supports_system_role(tokenizer)` is available if you want to check that behavior before formatting.
+
 ### Persona views
 
 | View | When to use |
@@ -87,6 +90,8 @@ question_prompt = format_mc_question(qa)
 correct         = mc_correct_letter(qa)
 ```
 
+`mc_answer_only_instruction(n_choices)` returns just the trailing instruction if you need it separately.
+
 `format_mc_question` renders the question body, lettered choices (A, B, C, …), and appends a trailing instruction telling the model to reply with only the choice label:
 
 ```
@@ -97,7 +102,7 @@ B. Teacher
 C. Nurse
 D. Accountant
 
-Answer only with the correct choice label (A, B, C, ...).
+Answer only with the correct choice label (A, B, C).
 ```
 
 ### Combining roleplay + multiple-choice
