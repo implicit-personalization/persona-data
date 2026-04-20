@@ -10,6 +10,7 @@ Shared dataset loading, prompt formatting, and environment utilities for the [im
 
 - `SynthPersonaDataset` for persona profiles plus QA pairs
 - `PersonaGuessDataset` for turn-based persona games
+- `NemotronPersonasFranceDataset` for French persona profiles from NVIDIA
 - prompt helpers for roleplay and multiple-choice evaluation
 - environment helpers for seeds, devices, and artifact paths
 
@@ -34,6 +35,12 @@ For local development alongside other repos, use an editable path source:
 persona-data = { path = "../persona-data", editable = true }
 ```
 
+### Testing
+
+```bash
+uv run --with pytest pytest tests/test_datasets.py
+```
+
 ## Package layout
 
 ```
@@ -41,6 +48,7 @@ src/persona_data/
 ├── __init__.py
 ├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
+├── nemotron_personas.py   # NemotronPersonasFranceDataset
 ├── prompts.py             # format_roleplay_prompt, format_mc_question, format_messages
 └── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
 ```

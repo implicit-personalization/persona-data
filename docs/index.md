@@ -8,6 +8,7 @@
 |---|---|---|
 | [SynthPersona](synth_persona.md) | [implicit-personalization/synth-persona](https://huggingface.co/datasets/implicit-personalization/synth-persona) | Persona profiles with biography views and QA pairs |
 | [PersonaGuess](persona_guess.md) | [implicit-personalization/persona-guess](https://huggingface.co/datasets/implicit-personalization/persona-guess) | Turn-based games where two personas ask each other questions |
+| [Nemotron Personas France](nemotron_personas.md) | [nvidia/Nemotron-Personas-France](https://huggingface.co/datasets/nvidia/Nemotron-Personas-France) | French persona profiles loaded from sharded parquet files |
 
 ## Prompt helpers
 
@@ -15,7 +16,7 @@ The [Prompt formatting](prompts.md) page covers helpers for roleplay prompts and
 
 ## Shared conventions
 
-- Loaders download from Hugging Face with `hf_hub_download`.
+- Loaders download from Hugging Face with `hf_hub_download`, including sharded parquet sources.
 - Dataset instances implement `__len__`, `__iter__`, and `__getitem__`.
 - Query helpers return typed records plus convenience string-only helpers.
 - New datasets should stay small, eager, and easy to inspect from a notebook.

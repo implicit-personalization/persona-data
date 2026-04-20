@@ -8,6 +8,7 @@
 from persona_data.synth_persona import SynthPersonaDataset
 
 dataset = SynthPersonaDataset()
+small = SynthPersonaDataset(sample_size=100)
 ```
 
 The default dataset source is `implicit-personalization/synth-persona`. The loader reads two JSONL files:
@@ -53,4 +54,5 @@ questions = dataset.questions(persona.id, type="implicit")
 
 - `difficulty` accepts one level or a list of levels.
 - `type` can be `"explicit"` or `"implicit"`.
+- `sample_size` can limit how many personas are kept in memory.
 - The loader keeps the dataset eager and notebook-friendly rather than streaming.

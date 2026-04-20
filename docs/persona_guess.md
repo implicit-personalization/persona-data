@@ -8,6 +8,7 @@
 from persona_data.persona_guess import PersonaGuessDataset
 
 games = PersonaGuessDataset()
+small = PersonaGuessDataset(sample_size=10)
 ```
 
 The default dataset source is `implicit-personalization/persona-guess`. The loader reads `games.jsonl`.
@@ -49,4 +50,5 @@ questions = games.questions(game.game_id, player="B")
 ## Notes
 
 - `player` can be `"A"`, `"B"`, or omitted for all turns.
+- `sample_size` can limit how many games are kept in memory.
 - The dataset is small enough to load eagerly into memory.
