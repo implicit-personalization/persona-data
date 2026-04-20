@@ -8,7 +8,7 @@
 |---|---|---|
 | [SynthPersona](synth_persona.md) | [implicit-personalization/synth-persona](https://huggingface.co/datasets/implicit-personalization/synth-persona) | Persona profiles with biography views and QA pairs |
 | [PersonaGuess](persona_guess.md) | [implicit-personalization/persona-guess](https://huggingface.co/datasets/implicit-personalization/persona-guess) | Turn-based games where two personas ask each other questions |
-| [Nemotron Personas France](nemotron_personas.md) | [nvidia/Nemotron-Personas-France](https://huggingface.co/datasets/nvidia/Nemotron-Personas-France) | French persona profiles loaded from sharded parquet files |
+| [Nemotron Personas](nemotron_personas.md) | [nvidia/Nemotron-Personas-France](https://huggingface.co/datasets/nvidia/Nemotron-Personas-France) / [nvidia/Nemotron-Personas-USA](https://huggingface.co/datasets/nvidia/Nemotron-Personas-USA) | French and US persona profiles loaded from sharded parquet files |
 
 ## Prompt helpers
 

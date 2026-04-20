@@ -15,7 +15,10 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from persona_data.environment import get_device
-from persona_data.nemotron_personas import NemotronPersonasFranceDataset
+from persona_data.nemotron_personas import (
+    NemotronPersonasFranceDataset,
+    NemotronPersonasUSADataset,
+)
 from persona_data.persona_guess import PersonaGuessDataset
 from persona_data.prompts import format_roleplay_prompt
 from persona_data.synth_persona import PersonaDataset
@@ -169,6 +172,109 @@ def main() -> None:
             )
             assert "Career goals and ambitions" in nemotron[0].templated_view
             assert nemotron.supports_qa is False
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        shard_1 = tmp / "train-00000-of-00002.parquet"
+        shard_2 = tmp / "train-00001-of-00002.parquet"
+
+        _write_parquet(
+            shard_1,
+            [
+                {
+                    "uuid": "u1",
+                    "persona": "Mary Alberti is a front-line food service specialist.",
+                    "cultural_background": "American",
+                    "skills_and_expertise": "POS operation",
+                    "skills_and_expertise_list": ["POS operation"],
+                    "hobbies_and_interests": "Running",
+                    "hobbies_and_interests_list": ["Running"],
+                    "career_goals_and_ambitions": "Promotion",
+                    "sex": "Female",
+                    "age": 28,
+                    "marital_status": "never_married",
+                    "education_level": "bachelors",
+                    "bachelors_field": "stem",
+                    "occupation": "food_service",
+                    "city": "Madison",
+                    "state": "WI",
+                    "zipcode": "53717",
+                    "country": "USA",
+                },
+                {
+                    "uuid": "u2",
+                    "persona": "Alicia Gonzalez is a machine learning researcher.",
+                    "cultural_background": "American",
+                    "skills_and_expertise": "Machine learning",
+                    "skills_and_expertise_list": ["Machine learning"],
+                    "hobbies_and_interests": "Painting",
+                    "hobbies_and_interests_list": ["Painting"],
+                    "career_goals_and_ambitions": "Lead a team",
+                    "sex": "Female",
+                    "age": 29,
+                    "marital_status": "divorced",
+                    "education_level": "graduate",
+                    "bachelors_field": "stem",
+                    "occupation": "research_scientist",
+                    "city": "Chico",
+                    "state": "CA",
+                    "zipcode": "95928",
+                    "country": "USA",
+                },
+            ],
+        )
+        _write_parquet(
+            shard_2,
+            [
+                {
+                    "uuid": "u3",
+                    "persona": "Deeva Cintron is a community finance volunteer.",
+                    "cultural_background": "American",
+                    "skills_and_expertise": "Budgeting",
+                    "skills_and_expertise_list": ["Budgeting"],
+                    "hobbies_and_interests": "Quilting",
+                    "hobbies_and_interests_list": ["Quilting"],
+                    "career_goals_and_ambitions": "Stay independent",
+                    "sex": "Female",
+                    "age": 85,
+                    "marital_status": "married_present",
+                    "education_level": "some_college",
+                    "bachelors_field": "",
+                    "occupation": "not_in_workforce",
+                    "city": "Saline",
+                    "state": "MI",
+                    "zipcode": "48176",
+                    "country": "USA",
+                }
+            ],
+        )
+
+        mapping = {
+            "data/train-00000-of-00002.parquet": shard_1,
+            "data/train-00001-of-00002.parquet": shard_2,
+        }
+
+        with (
+            patch(
+                "persona_data.nemotron_personas.list_repo_files",
+                return_value=list(mapping),
+            ),
+            patch(
+                "persona_data.nemotron_personas.hf_hub_download",
+                side_effect=lambda _repo, filename, repo_type="dataset": str(
+                    mapping[filename]
+                ),
+            ),
+        ):
+            nemotron_usa = NemotronPersonasUSADataset(sample_size=2)
+            assert len(nemotron_usa) == 2
+            assert nemotron_usa[0].name == "Mary Alberti"
+            assert nemotron_usa[1].name == "Alicia Gonzalez"
+            assert nemotron_usa.get_persona("u2").templated_view.startswith(
+                "Name: Alicia Gonzalez"
+            )
+            assert "Location: Chico, CA, 95928, USA" in nemotron_usa[1].templated_view
+            assert nemotron_usa.supports_qa is False
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

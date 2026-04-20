@@ -6,7 +6,7 @@
 
 - [SynthPersona](synth_persona.md)
 - [PersonaGuess](persona_guess.md)
-- [Nemotron Personas France](nemotron_personas.md)
+- [Nemotron Personas](nemotron_personas.md)
 - [Prompt formatting](prompts.md)
 - [Adding a new dataset](adding-a-dataset.md)
 

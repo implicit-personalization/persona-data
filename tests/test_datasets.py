@@ -15,6 +15,7 @@ import pytest
 from persona_data.environment import get_device
 from persona_data.nemotron_personas import (
     NemotronPersonasFranceDataset,
+    NemotronPersonasUSADataset,
     _extract_display_name,
     _split_name,
 )
@@ -253,6 +254,31 @@ def _row(uuid: str, persona_text: str, **overrides) -> dict:
     return base
 
 
+def _usa_row(uuid: str, persona_text: str, **overrides) -> dict:
+    base = {
+        "uuid": uuid,
+        "persona": persona_text,
+        "cultural_background": "American",
+        "skills_and_expertise": "Analysis",
+        "skills_and_expertise_list": ["Analysis"],
+        "hobbies_and_interests": "Music",
+        "hobbies_and_interests_list": ["Music"],
+        "career_goals_and_ambitions": "Research",
+        "sex": "Female",
+        "age": 30,
+        "marital_status": "never_married",
+        "education_level": "bachelors",
+        "bachelors_field": "stem",
+        "occupation": "scientist",
+        "city": "Madison",
+        "state": "WI",
+        "zipcode": "53717",
+        "country": "USA",
+    }
+    base.update(overrides)
+    return base
+
+
 def _write_parquet(path: Path, rows: list[dict]) -> None:
     pq.write_table(pa.Table.from_pylist(rows), path)
 
@@ -274,6 +300,46 @@ def nemotron_shards(tmp_path: Path):
         [
             _row("p3", "Sophie Germain est une spécialiste des mathématiques."),
             _row("p4", "?? inconnu"),  # no capitalised leader → fallback path
+        ],
+    )
+
+    mapping = {
+        "data/train-00000-of-00002.parquet": shard_1,
+        "data/train-00001-of-00002.parquet": shard_2,
+    }
+
+    with (
+        patch(
+            "persona_data.nemotron_personas.list_repo_files",
+            return_value=list(mapping),
+        ),
+        patch(
+            "persona_data.nemotron_personas.hf_hub_download",
+            side_effect=lambda _repo, filename, repo_type="dataset": str(
+                mapping[filename]
+            ),
+        ),
+    ):
+        yield mapping
+
+
+@pytest.fixture
+def nemotron_usa_shards(tmp_path: Path):
+    shard_1 = tmp_path / "train-00000-of-00002.parquet"
+    shard_2 = tmp_path / "train-00001-of-00002.parquet"
+
+    _write_parquet(
+        shard_1,
+        [
+            _usa_row("u1", "Mary Alberti is a front-line food service specialist."),
+            _usa_row("u2", "Alicia Gonzalez is a machine learning researcher."),
+        ],
+    )
+    _write_parquet(
+        shard_2,
+        [
+            _usa_row("u3", "Deeva Cintron is a community finance volunteer."),
+            _usa_row("u4", "?? unknown"),
         ],
     )
 
@@ -337,6 +403,50 @@ def test_nemotron_name_fallback_uses_uuid_when_no_match(nemotron_shards):
     assert persona_p4.persona["first_name"] == "p4"
     assert persona_p4.persona["last_name"] == ""
     assert persona_p4.name == "p4 "
+
+
+def test_nemotron_usa_loads_requested_sample(nemotron_usa_shards):
+    ds = NemotronPersonasUSADataset(sample_size=2)
+
+    assert len(ds) == 2
+    assert [p.id for p in ds] == ["u1", "u2"]
+    assert ds[0].name == "Mary Alberti"
+    assert ds.supports_qa is False
+
+
+def test_nemotron_usa_templated_view_includes_expected_sections(
+    nemotron_usa_shards,
+):
+    ds = NemotronPersonasUSADataset(sample_size=1)
+    view = ds[0].templated_view
+
+    assert view.startswith("Name: Mary Alberti")
+    assert "Location: Madison, WI, 53717, USA" in view
+    assert "Bachelors field: stem" in view
+
+
+def test_nemotron_usa_cross_shard_slicing(nemotron_usa_shards):
+    ds = NemotronPersonasUSADataset(sample_size=3)
+
+    assert [p.id for p in ds] == ["u1", "u2", "u3"]
+    assert ds[2].name == "Deeva Cintron"
+
+
+def test_nemotron_usa_get_persona_miss_returns_none(nemotron_usa_shards):
+    ds = NemotronPersonasUSADataset(sample_size=2)
+
+    assert ds.get_persona("missing") is None
+    assert ds.get_persona("u1").id == "u1"
+
+
+def test_nemotron_usa_name_fallback_uses_uuid_when_no_match(nemotron_usa_shards):
+    ds = NemotronPersonasUSADataset(sample_size=4)
+
+    persona_u4 = ds.get_persona("u4")
+    assert persona_u4 is not None
+    assert persona_u4.persona["first_name"] == "u4"
+    assert persona_u4.persona["last_name"] == ""
+    assert persona_u4.name == "u4 "
 
 
 @pytest.mark.parametrize(

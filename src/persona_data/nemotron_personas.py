@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Iterator
+from typing import Any, Callable, Iterator
 
 import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download, list_repo_files
@@ -68,7 +68,7 @@ def _split_name(display_name: str, fallback_id: str) -> tuple[str, str]:
     return parts[0], " ".join(parts[1:])
 
 
-def _templated_view(row: dict[str, Any], display_name: str) -> str:
+def _templated_view_france(row: dict[str, Any], display_name: str) -> str:
     lines = [
         f"Name: {display_name}",
         f"Age: {row.get('age', 'Unknown')}",
@@ -94,7 +94,37 @@ def _templated_view(row: dict[str, Any], display_name: str) -> str:
     return "\n".join(line for line in lines if line.strip())
 
 
-def _row_to_persona(row: dict[str, Any]) -> PersonaData:
+def _templated_view_usa(row: dict[str, Any], display_name: str) -> str:
+    lines = [
+        f"Name: {display_name}",
+        f"Age: {row.get('age', 'Unknown')}",
+        f"Sex: {row.get('sex', 'Unknown')}",
+        (
+            "Location: "
+            f"{row.get('city', 'Unknown')}, "
+            f"{row.get('state', 'Unknown')}, "
+            f"{row.get('zipcode', 'Unknown')}, "
+            f"{row.get('country', 'Unknown')}"
+        ),
+        f"Occupation: {row.get('occupation', 'Unknown')}",
+        f"Education: {row.get('education_level', 'Unknown')}",
+        f"Bachelors field: {row.get('bachelors_field', 'Unknown')}",
+        f"Marital status: {row.get('marital_status', 'Unknown')}",
+        "",
+        f"Cultural background: {row.get('cultural_background', '')}".strip(),
+        f"Skills and expertise: {row.get('skills_and_expertise', '')}".strip(),
+        f"Hobbies and interests: {row.get('hobbies_and_interests', '')}".strip(),
+        (
+            f"Career goals and ambitions: {row.get('career_goals_and_ambitions', '')}"
+        ).strip(),
+    ]
+    return "\n".join(line for line in lines if line.strip())
+
+
+def _row_to_persona(
+    row: dict[str, Any],
+    templated_view_builder: Callable[[dict[str, Any], str], str],
+) -> PersonaData:
     persona_text = str(row.get("persona", "")).strip()
     persona_id = str(row.get("uuid", "")).strip()
     display_name = _extract_display_name(persona_text, persona_id)
@@ -107,20 +137,17 @@ def _row_to_persona(row: dict[str, Any]) -> PersonaData:
     return PersonaData(
         id=persona_id,
         persona=persona_dict,
-        templated_view=_templated_view(row, display_name),
+        templated_view=templated_view_builder(row, display_name),
         biography_view=persona_text,
     )
 
 
-class NemotronPersonasFranceDataset:
-    """French persona-only dataset backed by `nvidia/Nemotron-Personas-France`."""
-
-    DEFAULT_REPO = "nvidia/Nemotron-Personas-France"
+class _NemotronPersonasDatasetBase:
     supports_qa = False
 
     def __init__(
         self,
-        hf_repo: str = DEFAULT_REPO,
+        hf_repo: str,
         *,
         sample_size: int = 200,
         rows: list[dict[str, Any]] | None = None,
@@ -129,8 +156,15 @@ class NemotronPersonasFranceDataset:
         self.sample_size = sample_size
         if rows is None:
             rows = _fetch_rows(hf_repo=hf_repo, offset=0, length=sample_size)
-        self._personas = [_row_to_persona(row) for row in rows]
+        self._personas = [
+            _row_to_persona(row, self._build_templated_view) for row in rows
+        ]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
+
+    def _build_templated_view(
+        self, row: dict[str, Any], display_name: str
+    ) -> str:
+        raise NotImplementedError
 
     def __len__(self) -> int:
         return len(self._personas)
@@ -149,3 +183,43 @@ class NemotronPersonasFranceDataset:
             f"{type(self).__name__}(hf_repo={self.hf_repo!r}, "
             f"sample_size={self.sample_size}, loaded={len(self._personas)})"
         )
+
+
+class NemotronPersonasFranceDataset(_NemotronPersonasDatasetBase):
+    """French persona-only dataset backed by `nvidia/Nemotron-Personas-France`."""
+
+    DEFAULT_REPO = "nvidia/Nemotron-Personas-France"
+
+    def __init__(
+        self,
+        hf_repo: str = DEFAULT_REPO,
+        *,
+        sample_size: int = 200,
+        rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(hf_repo, sample_size=sample_size, rows=rows)
+
+    def _build_templated_view(
+        self, row: dict[str, Any], display_name: str
+    ) -> str:
+        return _templated_view_france(row, display_name)
+
+
+class NemotronPersonasUSADataset(_NemotronPersonasDatasetBase):
+    """USA persona-only dataset backed by `nvidia/Nemotron-Personas-USA`."""
+
+    DEFAULT_REPO = "nvidia/Nemotron-Personas-USA"
+
+    def __init__(
+        self,
+        hf_repo: str = DEFAULT_REPO,
+        *,
+        sample_size: int = 200,
+        rows: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(hf_repo, sample_size=sample_size, rows=rows)
+
+    def _build_templated_view(
+        self, row: dict[str, Any], display_name: str
+    ) -> str:
+        return _templated_view_usa(row, display_name)
