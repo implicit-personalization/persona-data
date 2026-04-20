@@ -25,27 +25,20 @@ The resulting system prompt instructs the model to stay in character and not rev
 - `mode="roleplay"` for the plain persona prompt
 - `mode="conversational"` to add a natural chat instruction
 
+### Variant-aware system prompts
+
+When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, or the persona-less `baseline`), use `system_prompt_for_variant` to avoid branching on `"baseline"` at every call site:
+
+```python
+from persona_data.prompts import system_prompt_for_variant
+
+for variant in ("baseline", "templated", "biography"):
+    system_prompt = system_prompt_for_variant(persona, variant)
+```
+
+`"baseline"` returns a persona-less prompt; any other variant reads `<variant>_view` from the persona. `mode` is forwarded to `format_roleplay_prompt`.
+
 For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
-
-### Building the message list
-
-Pass the system prompt as the first message, then alternate user/assistant turns normally:
-
-```python
-messages = [
-    {"role": "system", "content": system_prompt},
-    {"role": "user",   "content": "Where did you grow up?"},
-]
-```
-
-To continue a conversation, append the model's previous reply and the next user message:
-
-```python
-messages += [
-    {"role": "assistant", "content": "I grew up in Little Rock, Arkansas."},
-    {"role": "user",      "content": "What did you study at university?"},
-]
-```
 
 ### Tokenizing for a local model
 
@@ -58,8 +51,6 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
 Tokenizers that do not support the `"system"` role (e.g. Gemma 2) are handled automatically — the system content is merged into the first user message.
-
-`supports_system_role(tokenizer)` is available if you want to check that behavior before formatting.
 
 ### Persona views
 
@@ -124,16 +115,4 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 The model should then reply with a single letter. Compare it against `correct` to score the response.
 
-### Filtering QA pairs by difficulty
-
-`get_qa` accepts `difficulty` to narrow the question pool:
-
-```python
-# Only easy questions (level 1)
-easy_qa = dataset.get_qa(persona.id, type="implicit", difficulty=1)
-
-# Medium and hard questions (levels 2 and 3)
-harder_qa = dataset.get_qa(persona.id, type="explicit", difficulty=[2, 3])
-```
-
-Difficulty 1 questions have answers stated explicitly in the profile; higher levels require inference.
+See [SynthPersona](synth_persona.md) for filtering QA pairs by `type` and `difficulty`.

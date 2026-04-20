@@ -21,11 +21,13 @@ from persona_data.nemotron_personas import (
 )
 from persona_data.persona_guess import PersonaGuessDataset
 from persona_data.prompts import (
+    EMPTY_PERSONA_PLACEHOLDER,
     format_mc_question,
     format_roleplay_prompt,
     mc_answer_only_instruction,
+    system_prompt_for_variant,
 )
-from persona_data.synth_persona import PersonaDataset, QAPair
+from persona_data.synth_persona import PersonaData, PersonaDataset, QAPair
 
 # --------------------------------------------------------------------------- #
 # environment / prompts                                                       #
@@ -43,6 +45,29 @@ def test_format_roleplay_prompt_non_empty():
 def test_format_roleplay_prompt_rejects_unknown_mode():
     with pytest.raises(ValueError):
         format_roleplay_prompt("hello", mode="mc")
+
+
+def test_system_prompt_for_variant_baseline_omits_persona():
+    persona = PersonaData(
+        id="p1",
+        persona={"first_name": "A", "last_name": "B"},
+        templated_view="TEMPLATED",
+        biography_view="BIO",
+    )
+    prompt = system_prompt_for_variant(persona, "baseline")
+    assert EMPTY_PERSONA_PLACEHOLDER in prompt
+    assert "TEMPLATED" not in prompt and "BIO" not in prompt
+
+
+def test_system_prompt_for_variant_reads_named_view():
+    persona = PersonaData(
+        id="p1",
+        persona={"first_name": "A", "last_name": "B"},
+        templated_view="TEMPLATED",
+        biography_view="BIO",
+    )
+    assert "BIO" in system_prompt_for_variant(persona, "biography")
+    assert "TEMPLATED" in system_prompt_for_variant(persona, "templated")
 
 
 def test_mc_answer_only_instruction_uses_actual_labels():

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from persona_data.synth_persona import QAPair
+from persona_data.synth_persona import PersonaData, QAPair
 
 _LETTERS = "ABCDEFG"
 
@@ -17,6 +17,7 @@ _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this pers
 
 EMPTY_PERSONA_PLACEHOLDER = "Assistant"
 PromptMode = Literal["roleplay", "conversational"]
+PersonaVariant = Literal["baseline", "templated", "biography", "statements"]
 
 
 def mc_answer_only_instruction(n_choices: int) -> str:
@@ -49,6 +50,19 @@ def format_roleplay_prompt(
     return base
 
 
+def system_prompt_for_variant(
+    persona: PersonaData, variant: PersonaVariant, mode: PromptMode = "roleplay"
+) -> str:
+    """Build the system prompt for a persona variant.
+
+    ``"baseline"`` returns a persona-less prompt; any other variant reads
+    ``<variant>_view`` from ``persona``.
+    """
+    if variant == "baseline":
+        return format_roleplay_prompt(mode=mode)
+    return format_roleplay_prompt(getattr(persona, f"{variant}_view"), mode=mode)
+
+
 def _format_mc_question_prompt(qa: QAPair) -> str:
     lines = [qa.question, ""]
     for i, choice in enumerate(qa.choices):
@@ -69,7 +83,7 @@ def mc_correct_letter(qa: QAPair) -> str:
     return _LETTERS[qa.correct_choice_index]
 
 
-def supports_system_role(tokenizer) -> bool:
+def _supports_system_role(tokenizer) -> bool:
     """Check if tokenizer's chat template supports the 'system' role."""
     try:
         tokenizer.apply_chat_template(
@@ -81,7 +95,7 @@ def supports_system_role(tokenizer) -> bool:
         return False
 
 
-def normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+def _normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """Merge any leading system message into the first user message.
 
     Only needed when the tokenizer's chat template doesn't support
@@ -112,9 +126,8 @@ def format_messages(messages: list[dict[str, str]], tokenizer) -> tuple[str, int
         response_start_idx: The token index of the first token in the last
                             assistant message.
     """
-    supports_system = supports_system_role(tokenizer)
-    if not supports_system:
-        messages = normalize_messages(messages)
+    if not _supports_system_role(tokenizer):
+        messages = _normalize_messages(messages)
 
     full_prompt = tokenizer.apply_chat_template(
         messages, tokenize=False, add_generation_prompt=False

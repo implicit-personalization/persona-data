@@ -161,9 +161,7 @@ class _NemotronPersonasDatasetBase:
         ]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
 
-    def _build_templated_view(
-        self, row: dict[str, Any], display_name: str
-    ) -> str:
+    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
         raise NotImplementedError
 
     def __len__(self) -> int:
@@ -199,9 +197,7 @@ class NemotronPersonasFranceDataset(_NemotronPersonasDatasetBase):
     ) -> None:
         super().__init__(hf_repo, sample_size=sample_size, rows=rows)
 
-    def _build_templated_view(
-        self, row: dict[str, Any], display_name: str
-    ) -> str:
+    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
         return _templated_view_france(row, display_name)
 
 
@@ -219,7 +215,5 @@ class NemotronPersonasUSADataset(_NemotronPersonasDatasetBase):
     ) -> None:
         super().__init__(hf_repo, sample_size=sample_size, rows=rows)
 
-    def _build_templated_view(
-        self, row: dict[str, Any], display_name: str
-    ) -> str:
+    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
         return _templated_view_usa(row, display_name)

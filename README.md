@@ -50,7 +50,7 @@ src/persona_data/
 ├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
 ├── nemotron_personas.py   # NemotronPersonasFranceDataset, NemotronPersonasUSADataset
-├── prompts.py             # format_roleplay_prompt, format_mc_question, format_messages
+├── prompts.py             # format_roleplay_prompt, system_prompt_for_variant, format_mc_question, format_messages
 └── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
 ```
 
@@ -103,11 +103,11 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 `format_roleplay_prompt` supports `mode="roleplay"` (default) and `mode="conversational"`.
 
+Use `system_prompt_for_variant(persona, variant)` when iterating over persona variants — it returns a persona-less prompt for `"baseline"` and reads `<variant>_view` otherwise.
+
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 
 `format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message.
-
-`supports_system_role(tokenizer)` checks that capability directly if you need to branch before formatting.
 
 ## Environment helpers
 

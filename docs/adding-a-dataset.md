@@ -50,6 +50,6 @@ class MyDataset:
 
 ## Documentation checklist
 
-- Add the loader to `docs/datasets.md`.
+- Add the loader to the dataset table in `docs/index.md`.
 - Add a dataset-specific page if the source is reused by other projects.
 - Mention the default Hugging Face repo and any important file names.
