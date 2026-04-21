@@ -4,18 +4,19 @@
 
 ## Roleplay (chat with a specific persona)
 
-Use `format_roleplay_prompt` to build a system prompt that puts the model in character as a persona.
+Use `system_prompt_for_variant` when you are iterating over persona variants, and `format_roleplay_prompt` when you already have the exact persona text.
 
 ```python
 from persona_data.synth_persona import SynthPersonaDataset
-from persona_data.prompts import format_roleplay_prompt
+from persona_data.prompts import format_roleplay_prompt, system_prompt_for_variant
 
 dataset = SynthPersonaDataset()
 persona = dataset[0]
 
-# Pick the persona view you want the model to embody.
-# biography_view gives the richest context; templated_view is more compact.
-system_prompt = format_roleplay_prompt(persona.biography_view)
+system_prompt = system_prompt_for_variant(persona, "biography")
+
+# If you already have the raw persona text, this is the lower-level primitive.
+# system_prompt = format_roleplay_prompt(persona.biography_view)
 ```
 
 The resulting system prompt instructs the model to stay in character and not reveal it is an AI.
@@ -27,7 +28,7 @@ The resulting system prompt instructs the model to stay in character and not rev
 
 ### Variant-aware system prompts
 
-When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, or the persona-less `baseline`), use `system_prompt_for_variant` to avoid branching on `"baseline"` at every call site:
+When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, `statements`, or the persona-less `baseline`), use `system_prompt_for_variant` to avoid branching on `"baseline"` at every call site:
 
 ```python
 from persona_data.prompts import system_prompt_for_variant
@@ -40,9 +41,11 @@ for variant in ("baseline", "templated", "biography"):
 
 For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
 
+`format_mc_question()` expects a `QAPair` with `choices` and `correct_choice_index` populated. `mc_answer_only_instruction(n_choices)` supports 1 to 7 choices.
+
 ### Tokenizing for a local model
 
-`format_messages` applies the tokenizer's chat template and returns the full prompt string plus the token index where the last assistant turn begins (used for loss masking or logit slicing):
+`format_messages` applies the tokenizer's chat template and returns the full prompt string plus the token index where the generated response should begin (used for loss masking or logit slicing):
 
 ```python
 from persona_data.prompts import format_messages
@@ -73,9 +76,8 @@ from persona_data.prompts import format_mc_question, mc_correct_letter
 dataset = SynthPersonaDataset()
 persona = dataset[0]
 
-# Retrieve MC-capable QA pairs (type="explicit" or "implicit")
-qa_pairs = dataset.get_qa(persona.id, type="explicit")
-qa = qa_pairs[0]
+# Retrieve a QA pair with choices populated
+qa = next(qa for qa in dataset.get_qa(persona.id) if qa.choices)
 
 question_prompt = format_mc_question(qa)
 correct         = mc_correct_letter(qa)
@@ -101,7 +103,9 @@ Answer only with the correct choice label (A, B, C).
 To evaluate whether a model answers questions correctly when embodying a persona, combine both helpers:
 
 ```python
-system_prompt    = format_roleplay_prompt(persona.biography_view)
+from persona_data.prompts import format_messages, format_mc_question, mc_correct_letter, system_prompt_for_variant
+
+system_prompt    = system_prompt_for_variant(persona, "biography")
 question_prompt  = format_mc_question(qa)
 correct          = mc_correct_letter(qa)
 

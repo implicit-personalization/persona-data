@@ -42,12 +42,14 @@ persona-data = { path = "../persona-data", editable = true }
 uv run --with pytest pytest tests/test_datasets.py
 ```
 
+The release workflow also runs `tests/smoke_test.py` against the built wheel and source distribution.
+
 ## Package layout
 
 ```
 src/persona_data/
 ├── __init__.py
-├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection
+├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection, Statement
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
 ├── nemotron_personas.py   # NemotronPersonasFranceDataset, NemotronPersonasUSADataset
 ├── prompts.py             # format_roleplay_prompt, system_prompt_for_variant, format_mc_question, format_messages

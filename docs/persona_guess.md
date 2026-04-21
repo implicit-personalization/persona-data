@@ -13,6 +13,8 @@ small = PersonaGuessDataset(sample_size=10)
 
 The default dataset source is `implicit-personalization/persona-guess`. The loader reads `games.jsonl`.
 
+`sample_size` keeps the leading games rather than sampling randomly.
+
 ## Records
 
 - `GameRecord`: one match between two personas
@@ -51,4 +53,5 @@ questions = games.questions(game.game_id, player="B")
 
 - `player` can be `"A"`, `"B"`, or omitted for all turns.
 - `sample_size` can limit how many games are kept in memory.
+- `sample_size` keeps a leading slice rather than sampling randomly.
 - The dataset is small enough to load eagerly into memory.
