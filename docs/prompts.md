@@ -26,9 +26,22 @@ The resulting system prompt instructs the model to stay in character and not rev
 - `mode="roleplay"` for the plain persona prompt
 - `mode="conversational"` to add a natural chat instruction
 
-### Variant-aware system prompts
+### Variant-Aware System Prompts
 
-When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, `statements`, or the persona-less `baseline`), use `system_prompt_for_variant` to avoid branching on `"baseline"` at every call site:
+When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, or `statements`), use `system_prompt_for_variant`:
+
+```python
+from persona_data.prompts import system_prompt_for_variant
+
+for variant in ("templated", "biography"):
+    system_prompt = system_prompt_for_variant(persona, variant)
+```
+
+Any variant reads `<variant>_view` from the persona. `mode` is forwarded to `format_roleplay_prompt`.
+
+### Baseline Prompt
+
+The persona-less Assistant baseline is a prompt option, not a persona variant:
 
 ```python
 from persona_data.prompts import (
@@ -37,15 +50,15 @@ from persona_data.prompts import (
     system_prompt_for_variant,
 )
 
-for variant in ("baseline", "templated", "biography"):
-    system_prompt = system_prompt_for_variant(persona, variant)
+system_prompt = system_prompt_for_variant(
+    persona,
+    "biography",
+    persona_option="baseline",
+)
 ```
 
-`"baseline"` returns a persona-less prompt; any other variant reads `<variant>_view` from the persona. `mode` is forwarded to `format_roleplay_prompt`.
-
-For artifact naming or UI labels, use `BASELINE_PERSONA_ID` and
-`BASELINE_PERSONA_NAME`. They define the shared baseline identity used by
-downstream packages.
+Downstream packages can use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME`
+for artifact naming or UI labels.
 
 For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
 

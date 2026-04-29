@@ -19,7 +19,8 @@ BASELINE_PERSONA_ID = "baseline"
 BASELINE_PERSONA_NAME = "Assistant"
 EMPTY_PERSONA_PLACEHOLDER = BASELINE_PERSONA_NAME
 PromptMode = Literal["roleplay", "conversational"]
-PersonaVariant = Literal["baseline", "templated", "biography", "statements"]
+PersonaVariant = Literal["templated", "biography", "statements"]
+PersonaPromptOption = Literal["persona", "baseline"]
 
 
 def mc_answer_only_instruction(n_choices: int) -> str:
@@ -53,15 +54,20 @@ def format_roleplay_prompt(
 
 
 def system_prompt_for_variant(
-    persona: PersonaData, variant: PersonaVariant, mode: PromptMode = "roleplay"
+    persona: PersonaData,
+    variant: PersonaVariant,
+    mode: PromptMode = "roleplay",
+    persona_option: PersonaPromptOption = "persona",
 ) -> str:
     """Build the system prompt for a persona variant.
 
-    ``"baseline"`` returns a persona-less prompt; any other variant reads
-    ``<variant>_view`` from ``persona``.
+    ``persona_option="baseline"`` returns a persona-less prompt; the default
+    reads ``<variant>_view`` from ``persona``.
     """
-    if variant == "baseline":
+    if persona_option == "baseline":
         return format_roleplay_prompt(mode=mode)
+    if persona_option != "persona":
+        raise ValueError(f"Unsupported persona option: {persona_option!r}")
     return format_roleplay_prompt(getattr(persona, f"{variant}_view"), mode=mode)
 
 

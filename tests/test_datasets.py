@@ -49,14 +49,18 @@ def test_format_roleplay_prompt_rejects_unknown_mode():
         format_roleplay_prompt("hello", mode="mc")
 
 
-def test_system_prompt_for_variant_baseline_omits_persona():
+def test_system_prompt_for_variant_baseline_option_omits_persona():
     persona = PersonaData(
         id="p1",
         persona={"first_name": "A", "last_name": "B"},
         templated_view="TEMPLATED",
         biography_view="BIO",
     )
-    prompt = system_prompt_for_variant(persona, "baseline")
+    prompt = system_prompt_for_variant(
+        persona,
+        "biography",
+        persona_option="baseline",
+    )
     assert BASELINE_PERSONA_ID == "baseline"
     assert EMPTY_PERSONA_PLACEHOLDER == BASELINE_PERSONA_NAME
     assert EMPTY_PERSONA_PLACEHOLDER in prompt
