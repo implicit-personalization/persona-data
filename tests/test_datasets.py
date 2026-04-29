@@ -23,11 +23,9 @@ from persona_data.persona_guess import PersonaGuessDataset
 from persona_data.prompts import (
     BASELINE_PERSONA_ID,
     BASELINE_PERSONA_NAME,
-    EMPTY_PERSONA_PLACEHOLDER,
     format_mc_question,
     format_roleplay_prompt,
     mc_answer_only_instruction,
-    system_prompt_for_variant,
 )
 from persona_data.synth_persona import PersonaData, PersonaDataset, QAPair
 
@@ -49,33 +47,22 @@ def test_format_roleplay_prompt_rejects_unknown_mode():
         format_roleplay_prompt("hello", mode="mc")
 
 
-def test_system_prompt_for_variant_baseline_option_omits_persona():
-    persona = PersonaData(
-        id="p1",
-        persona={"first_name": "A", "last_name": "B"},
-        templated_view="TEMPLATED",
-        biography_view="BIO",
-    )
-    prompt = system_prompt_for_variant(
-        persona,
-        "biography",
-        persona_option="baseline",
-    )
+def test_format_roleplay_prompt_baseline_default():
+    """Calling without args yields the persona-less Assistant baseline prompt."""
+    prompt = format_roleplay_prompt()
     assert BASELINE_PERSONA_ID == "baseline"
-    assert EMPTY_PERSONA_PLACEHOLDER == BASELINE_PERSONA_NAME
-    assert EMPTY_PERSONA_PLACEHOLDER in prompt
-    assert "TEMPLATED" not in prompt and "BIO" not in prompt
+    assert BASELINE_PERSONA_NAME in prompt
 
 
-def test_system_prompt_for_variant_reads_named_view():
+def test_format_roleplay_prompt_with_persona_view():
     persona = PersonaData(
         id="p1",
         persona={"first_name": "A", "last_name": "B"},
         templated_view="TEMPLATED",
         biography_view="BIO",
     )
-    assert "BIO" in system_prompt_for_variant(persona, "biography")
-    assert "TEMPLATED" in system_prompt_for_variant(persona, "templated")
+    assert "BIO" in format_roleplay_prompt(persona.biography_view)
+    assert "TEMPLATED" in format_roleplay_prompt(persona.templated_view)
 
 
 def test_mc_answer_only_instruction_uses_actual_labels():

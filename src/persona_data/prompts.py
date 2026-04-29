@@ -1,6 +1,6 @@
 from typing import Literal
 
-from persona_data.synth_persona import PersonaData, QAPair
+from persona_data.synth_persona import QAPair
 
 _LETTERS = "ABCDEFG"
 
@@ -17,10 +17,7 @@ _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this pers
 
 BASELINE_PERSONA_ID = "baseline"
 BASELINE_PERSONA_NAME = "Assistant"
-EMPTY_PERSONA_PLACEHOLDER = BASELINE_PERSONA_NAME
 PromptMode = Literal["roleplay", "conversational"]
-PersonaVariant = Literal["templated", "biography", "statements"]
-PersonaPromptOption = Literal["persona", "baseline"]
 
 
 def mc_answer_only_instruction(n_choices: int) -> str:
@@ -32,12 +29,13 @@ def mc_answer_only_instruction(n_choices: int) -> str:
 
 
 def format_roleplay_prompt(
-    persona: str = EMPTY_PERSONA_PLACEHOLDER, mode: PromptMode = "roleplay"
+    persona: str = BASELINE_PERSONA_NAME, mode: PromptMode = "roleplay"
 ) -> str:
     """Build a persona system prompt.
 
     Args:
-        persona: The persona text (templated or biography view).
+        persona: The persona text (templated or biography view). Defaults to
+            ``BASELINE_PERSONA_NAME`` for the persona-less Assistant baseline.
         mode: Prompt style selector.
             - "roleplay": plain persona prompt
             - "conversational": persona prompt with a natural chat instruction
@@ -51,24 +49,6 @@ def format_roleplay_prompt(
     if mode != "roleplay":
         raise ValueError(f"Unsupported mode: {mode!r}")
     return base
-
-
-def system_prompt_for_variant(
-    persona: PersonaData,
-    variant: PersonaVariant,
-    mode: PromptMode = "roleplay",
-    persona_option: PersonaPromptOption = "persona",
-) -> str:
-    """Build the system prompt for a persona variant.
-
-    ``persona_option="baseline"`` returns a persona-less prompt; the default
-    reads ``<variant>_view`` from ``persona``.
-    """
-    if persona_option == "baseline":
-        return format_roleplay_prompt(mode=mode)
-    if persona_option != "persona":
-        raise ValueError(f"Unsupported persona option: {persona_option!r}")
-    return format_roleplay_prompt(getattr(persona, f"{variant}_view"), mode=mode)
 
 
 def _format_mc_question_prompt(qa: QAPair) -> str:
