@@ -31,13 +31,21 @@ The resulting system prompt instructs the model to stay in character and not rev
 When running the same pipeline over multiple persona variants (e.g. `templated`, `biography`, `statements`, or the persona-less `baseline`), use `system_prompt_for_variant` to avoid branching on `"baseline"` at every call site:
 
 ```python
-from persona_data.prompts import system_prompt_for_variant
+from persona_data.prompts import (
+    BASELINE_PERSONA_ID,
+    BASELINE_PERSONA_NAME,
+    system_prompt_for_variant,
+)
 
 for variant in ("baseline", "templated", "biography"):
     system_prompt = system_prompt_for_variant(persona, variant)
 ```
 
 `"baseline"` returns a persona-less prompt; any other variant reads `<variant>_view` from the persona. `mode` is forwarded to `format_roleplay_prompt`.
+
+For artifact naming or UI labels, use `BASELINE_PERSONA_ID` and
+`BASELINE_PERSONA_NAME`. They define the shared baseline identity used by
+downstream packages.
 
 For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
 

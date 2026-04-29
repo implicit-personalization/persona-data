@@ -105,7 +105,7 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 `format_roleplay_prompt` supports `mode="roleplay"` (default) and `mode="conversational"`.
 
-Use `system_prompt_for_variant(persona, variant)` when iterating over persona variants — it returns a persona-less prompt for `"baseline"` and reads `<variant>_view` otherwise.
+Use `system_prompt_for_variant(persona, variant)` when iterating over persona variants — it returns a persona-less prompt for `"baseline"` and reads `<variant>_view` otherwise. Downstream artifact code can use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.prompts` for the shared baseline identity.
 
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 

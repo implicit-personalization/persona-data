@@ -15,7 +15,9 @@ Do not mention that you are an AI model.
 
 _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this person."
 
-EMPTY_PERSONA_PLACEHOLDER = "Assistant"
+BASELINE_PERSONA_ID = "baseline"
+BASELINE_PERSONA_NAME = "Assistant"
+EMPTY_PERSONA_PLACEHOLDER = BASELINE_PERSONA_NAME
 PromptMode = Literal["roleplay", "conversational"]
 PersonaVariant = Literal["baseline", "templated", "biography", "statements"]
 

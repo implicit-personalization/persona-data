@@ -21,6 +21,8 @@ from persona_data.nemotron_personas import (
 )
 from persona_data.persona_guess import PersonaGuessDataset
 from persona_data.prompts import (
+    BASELINE_PERSONA_ID,
+    BASELINE_PERSONA_NAME,
     EMPTY_PERSONA_PLACEHOLDER,
     format_mc_question,
     format_roleplay_prompt,
@@ -55,6 +57,8 @@ def test_system_prompt_for_variant_baseline_omits_persona():
         biography_view="BIO",
     )
     prompt = system_prompt_for_variant(persona, "baseline")
+    assert BASELINE_PERSONA_ID == "baseline"
+    assert EMPTY_PERSONA_PLACEHOLDER == BASELINE_PERSONA_NAME
     assert EMPTY_PERSONA_PLACEHOLDER in prompt
     assert "TEMPLATED" not in prompt and "BIO" not in prompt
 
