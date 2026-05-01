@@ -71,7 +71,7 @@ def mc_correct_letter(qa: QAPair) -> str:
     return _LETTERS[qa.correct_choice_index]
 
 
-def _supports_system_role(tokenizer) -> bool:
+def supports_system_role(tokenizer) -> bool:
     """Check if tokenizer's chat template supports the 'system' role."""
     try:
         tokenizer.apply_chat_template(
@@ -83,7 +83,7 @@ def _supports_system_role(tokenizer) -> bool:
         return False
 
 
-def _normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
+def normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     """Merge any leading system message into the first user message.
 
     Only needed when the tokenizer's chat template doesn't support
@@ -101,38 +101,51 @@ def _normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
     return rest
 
 
-def format_messages(messages: list[dict[str, str]], tokenizer) -> tuple[str, int]:
+def format_messages(
+    messages: list[dict[str, str]],
+    tokenizer,
+    add_generation_prompt: bool = False,
+) -> tuple[str, int]:
     """Format a conversation for the model using its chat template.
 
     Args:
         messages: List of message dicts with "role" and "content" keys.
                  Can include "system", "user", and "assistant" roles.
         tokenizer: The tokenizer with chat template support.
+        add_generation_prompt: When False (default, extraction/training),
+            ``messages`` is expected to end with an ``assistant`` turn whose
+            content is the response to score. When True (inference), the
+            generation-prompt prefix (e.g. ``<start_of_turn>model``) is
+            appended so the rendered string is ready to feed to ``generate``.
 
     Returns:
         full_prompt: The full formatted prompt as a string.
-        response_start_idx: The token index of the first token in the last
-                            assistant message.
+        response_start_idx: Token index where the assistant response begins.
+            With ``add_generation_prompt=False`` this points to the first
+            token of the last assistant message in ``messages``. With
+            ``add_generation_prompt=True`` it equals the prompt length, i.e.
+            the index of the first token the model will generate.
     """
-    if not _supports_system_role(tokenizer):
-        messages = _normalize_messages(messages)
+    if not supports_system_role(tokenizer):
+        messages = normalize_messages(messages)
 
     full_prompt = tokenizer.apply_chat_template(
-        messages, tokenize=False, add_generation_prompt=False
+        messages, tokenize=False, add_generation_prompt=add_generation_prompt
     )
 
-    if len(messages) <= 1:
-        prompt_without_response = tokenizer.apply_chat_template(
-            messages, tokenize=True, add_generation_prompt=True, return_tensors="pt"
-        )
+    if add_generation_prompt:
+        prefix_messages = messages
+    elif len(messages) > 1:
+        prefix_messages = messages[:-1]
     else:
-        prompt_without_response = tokenizer.apply_chat_template(
-            messages[:-1],
-            tokenize=True,
-            add_generation_prompt=True,
-            return_tensors="pt",
-        )
+        prefix_messages = messages
 
+    prompt_without_response = tokenizer.apply_chat_template(
+        prefix_messages,
+        tokenize=True,
+        add_generation_prompt=True,
+        return_tensors="pt",
+    )
     response_start_idx = prompt_without_response["input_ids"].shape[1]
 
     return full_prompt, response_start_idx

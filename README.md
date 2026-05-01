@@ -109,7 +109,7 @@ When iterating over persona variants, call `format_roleplay_prompt(getattr(perso
 
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 
-`format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message.
+`format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message. Pass `add_generation_prompt=True` to render an inference-ready prompt (messages ending in a `user` turn); the returned `response_start_idx` then equals the prompt length, ready to slice `model.generate` output.
 
 ## Environment helpers
 

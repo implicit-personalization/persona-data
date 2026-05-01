@@ -56,15 +56,24 @@ For multiple-choice evaluation, use `format_mc_question(qa)` to render the quest
 
 ### Tokenizing for a local model
 
-`format_messages` applies the tokenizer's chat template and returns the full prompt string plus the token index where the generated response should begin (used for loss masking or logit slicing):
+`format_messages` applies the tokenizer's chat template and returns the full prompt string plus the token index where the assistant response begins. It supports two modes via `add_generation_prompt`:
 
 ```python
 from persona_data.prompts import format_messages
 
+# Extraction / training: messages end with the assistant turn to score.
+# response_start_idx points at the first token of that last assistant message.
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
+
+# Inference: messages end with a user turn. The generation-prompt prefix
+# (e.g. <start_of_turn>model) is appended; response_start_idx equals the
+# prompt length, so model output can be sliced with sequences[:, response_start_idx:].
+full_prompt, response_start_idx = format_messages(
+    messages, tokenizer, add_generation_prompt=True
+)
 ```
 
-Tokenizers that do not support the `"system"` role (e.g. Gemma 2) are handled automatically — the system content is merged into the first user message.
+Tokenizers that do not support the `"system"` role (e.g. Gemma 2) are handled automatically — the system content is merged into the first user message via the public `normalize_messages` helper. `supports_system_role(tokenizer)` is exposed for callers that need to branch on this.
 
 ### Persona views
 
