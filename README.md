@@ -52,7 +52,7 @@ src/persona_data/
 ├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection, Statement
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
 ├── nemotron_personas.py   # NemotronPersonasFranceDataset, NemotronPersonasUSADataset
-├── prompts.py             # format_roleplay_prompt, format_mc_question, format_messages
+├── prompts.py             # format_prompt, format_mc_question, format_messages
 └── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
 ```
 
@@ -91,9 +91,9 @@ questions = games.questions(game.game_id, player="B")
 ## Prompt formatting
 
 ```python
-from persona_data.prompts import format_messages, format_roleplay_prompt
+from persona_data.prompts import format_messages, format_prompt
 
-system_prompt = format_roleplay_prompt(persona.biography_view)
+system_prompt = format_prompt(persona, "biography")
 
 messages = [
     {"role": "system", "content": system_prompt},
@@ -103,9 +103,9 @@ messages = [
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
-`format_roleplay_prompt` supports `mode="roleplay"` (default) and `mode="conversational"`.
+`format_prompt` accepts raw profile text, a `PersonaData` plus one of the standard variants (`"templated"` or `"biography"`), or no persona for the `"baseline"` prompt. It also accepts `mode="roleplay"` (default) and `mode="conversational"`.
 
-When iterating over persona variants, call `format_roleplay_prompt(getattr(persona, f"{variant}_view"))`. Calling `format_roleplay_prompt()` (no args) yields the persona-less Assistant baseline prompt. Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.prompts` for the shared baseline identity in artifacts and UI labels.
+When iterating over variants in an experiment, pass `"templated"` or `"biography"` to `format_prompt(persona, variant)`. Calling `format_prompt()` yields the persona-less Assistant baseline prompt. Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.prompts` for the shared baseline identity in artifacts and UI labels.
 
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 

@@ -20,7 +20,7 @@ from persona_data.nemotron_personas import (
     NemotronPersonasUSADataset,
 )
 from persona_data.persona_guess import PersonaGuessDataset
-from persona_data.prompts import format_roleplay_prompt
+from persona_data.prompts import format_prompt
 from persona_data.synth_persona import PersonaDataset
 
 
@@ -30,7 +30,8 @@ def _write_parquet(path: Path, rows: list[dict]) -> None:
 
 def main() -> None:
     assert get_device().type in {"cpu", "cuda", "mps"}
-    assert format_roleplay_prompt("hello")
+    assert format_prompt("hello")
+    assert format_prompt()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

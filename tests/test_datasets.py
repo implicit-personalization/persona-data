@@ -24,7 +24,7 @@ from persona_data.prompts import (
     BASELINE_PERSONA_ID,
     BASELINE_PERSONA_NAME,
     format_mc_question,
-    format_roleplay_prompt,
+    format_prompt,
     mc_answer_only_instruction,
 )
 from persona_data.synth_persona import PersonaData, PersonaDataset, QAPair
@@ -38,31 +38,56 @@ def test_get_device_returns_known_kind():
     assert get_device().type in {"cpu", "cuda", "mps"}
 
 
-def test_format_roleplay_prompt_non_empty():
-    assert format_roleplay_prompt("hello")
+def test_format_prompt_non_empty():
+    assert format_prompt("hello")
 
 
-def test_format_roleplay_prompt_rejects_unknown_mode():
+def test_format_prompt_rejects_unknown_mode():
     with pytest.raises(ValueError):
-        format_roleplay_prompt("hello", mode="mc")
+        format_prompt("hello", mode="mc")
 
 
-def test_format_roleplay_prompt_baseline_default():
+def test_format_prompt_baseline_default():
     """Calling without args yields the persona-less Assistant baseline prompt."""
-    prompt = format_roleplay_prompt()
+    prompt = format_prompt()
     assert BASELINE_PERSONA_ID == "baseline"
     assert BASELINE_PERSONA_NAME in prompt
 
 
-def test_format_roleplay_prompt_with_persona_view():
+def test_format_prompt_with_persona_view():
     persona = PersonaData(
         id="p1",
         persona={"first_name": "A", "last_name": "B"},
         templated_view="TEMPLATED",
         biography_view="BIO",
     )
-    assert "BIO" in format_roleplay_prompt(persona.biography_view)
-    assert "TEMPLATED" in format_roleplay_prompt(persona.templated_view)
+    assert "BIO" in format_prompt(persona.biography_view)
+    assert "TEMPLATED" in format_prompt(persona.templated_view)
+    assert "BIO" in format_prompt(persona, "biography")
+    assert "TEMPLATED" in format_prompt(persona, "templated")
+
+
+def test_format_prompt_requires_persona_for_persona_variants():
+    with pytest.raises(ValueError, match="requires a persona"):
+        format_prompt(variant="biography")
+
+
+def test_format_prompt_rejects_unknown_variant():
+    with pytest.raises(ValueError, match="Unsupported persona prompt variant"):
+        format_prompt(variant="statements")  # type: ignore[arg-type]
+
+
+def test_format_prompt_variant_forwards_mode():
+    persona = PersonaData(
+        id="p1",
+        persona={"first_name": "A", "last_name": "B"},
+        templated_view="TEMPLATED",
+        biography_view="BIO",
+    )
+
+    prompt = format_prompt(persona, "biography", mode="conversational")
+    assert "BIO" in prompt
+    assert "Answer naturally and conversationally" in prompt
 
 
 def test_mc_answer_only_instruction_uses_actual_labels():

@@ -4,47 +4,48 @@
 
 ## Roleplay (chat with a specific persona)
 
-`format_roleplay_prompt` is the main entry point — pass the persona text you want to embed:
+`format_prompt` is the main entry point for persona prompts:
 
 ```python
 from persona_data.synth_persona import SynthPersonaDataset
-from persona_data.prompts import format_roleplay_prompt
+from persona_data.prompts import format_prompt
 
 dataset = SynthPersonaDataset()
 persona = dataset[0]
 
-system_prompt = format_roleplay_prompt(persona.biography_view)
+system_prompt = format_prompt(persona, "biography")
 ```
 
 The resulting system prompt instructs the model to stay in character and not reveal it is an AI.
 
-`format_roleplay_prompt` also accepts a `mode` argument:
+`format_prompt` accepts raw profile text, a `PersonaData` plus one of the standard variants, or no persona for the shared baseline. It also accepts a `mode` argument:
 
 - `mode="roleplay"` for the plain persona prompt
 - `mode="conversational"` to add a natural chat instruction
 
 ### Variant-Aware System Prompts
 
-To iterate over persona variants (e.g. `templated`, `biography`), pull the matching view from the persona directly:
+To iterate over persona variants, keep the experiment's choices local and pass each variant to `format_prompt`:
 
 ```python
+from persona_data.prompts import format_prompt
+
 for variant in ("templated", "biography"):
-    system_prompt = format_roleplay_prompt(getattr(persona, f"{variant}_view"))
+    system_prompt = format_prompt(persona, variant)
 ```
 
 ### Baseline Prompt
 
-The persona-less Assistant baseline is just `format_roleplay_prompt()` with no arguments — the default `persona` is `BASELINE_PERSONA_NAME`:
+The persona-less Assistant baseline is `format_prompt()` with no arguments:
 
 ```python
 from persona_data.prompts import (
     BASELINE_PERSONA_ID,
     BASELINE_PERSONA_NAME,
-    format_roleplay_prompt,
+    format_prompt,
 )
 
-system_prompt = format_roleplay_prompt()
-# equivalent to: format_roleplay_prompt(BASELINE_PERSONA_NAME)
+system_prompt = format_prompt()
 ```
 
 Downstream packages can use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME`
@@ -123,9 +124,9 @@ Answer only with the correct choice label (A, B, C).
 To evaluate whether a model answers questions correctly when embodying a persona, combine both helpers:
 
 ```python
-from persona_data.prompts import format_messages, format_mc_question, format_roleplay_prompt, mc_correct_letter
+from persona_data.prompts import format_messages, format_mc_question, format_prompt, mc_correct_letter
 
-system_prompt    = format_roleplay_prompt(persona.biography_view)
+system_prompt    = format_prompt(persona, "biography")
 question_prompt  = format_mc_question(qa)
 correct          = mc_correct_letter(qa)
 

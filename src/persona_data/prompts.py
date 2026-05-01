@@ -1,6 +1,6 @@
 from typing import Literal
 
-from persona_data.synth_persona import QAPair
+from persona_data.synth_persona import PersonaData, QAPair
 
 _LETTERS = "ABCDEFG"
 
@@ -28,22 +28,42 @@ def mc_answer_only_instruction(n_choices: int) -> str:
     return f"Answer only with the correct choice label ({labels})."
 
 
-def format_roleplay_prompt(
-    persona: str = BASELINE_PERSONA_NAME, mode: PromptMode = "roleplay"
+def format_prompt(
+    persona: PersonaData | str | None = None,
+    variant: Literal["baseline", "templated", "biography"] = BASELINE_PERSONA_ID,
+    mode: PromptMode = "roleplay",
 ) -> str:
-    """Build a persona system prompt.
+    """Build a standard persona system prompt.
 
     Args:
-        persona: The persona text (templated or biography view). Defaults to
-            ``BASELINE_PERSONA_NAME`` for the persona-less Assistant baseline.
+        persona: A ``PersonaData`` object, raw profile text, or ``None`` for
+            the persona-less Assistant baseline.
+        variant: Which standard view to read when ``persona`` is a
+            ``PersonaData`` object. Ignored for raw profile text.
         mode: Prompt style selector.
             - "roleplay": plain persona prompt
             - "conversational": persona prompt with a natural chat instruction
 
     Raises:
-        ValueError: If `mode` is not one of the supported values.
+        ValueError: If `mode` or `variant` is not supported, or a persona is
+            required but missing.
     """
-    base = BASE_ROLEPLAY_PROMPT.format(persona=persona)
+    if isinstance(persona, str):
+        profile_text = persona
+    elif variant == BASELINE_PERSONA_ID:
+        profile_text = BASELINE_PERSONA_NAME
+    elif variant == "templated":
+        if persona is None:
+            raise ValueError(f"variant {variant!r} requires a persona")
+        profile_text = persona.templated_view
+    elif variant == "biography":
+        if persona is None:
+            raise ValueError(f"variant {variant!r} requires a persona")
+        profile_text = persona.biography_view
+    else:
+        raise ValueError(f"Unsupported persona prompt variant: {variant!r}")
+
+    base = BASE_ROLEPLAY_PROMPT.format(persona=profile_text)
     if mode == "conversational":
         return base + _CONVERSATIONAL_SUFFIX
     if mode != "roleplay":
