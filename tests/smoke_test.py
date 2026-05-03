@@ -45,14 +45,6 @@ def main() -> None:
                     "persona": {"first_name": "Ada", "last_name": "Lovelace"},
                     "templated_view": "Ada Lovelace",
                     "biography_view": "Bio",
-                    "sections": [
-                        {
-                            "section_id": "s1",
-                            "category": "career",
-                            "title": "Career",
-                            "paragraphs": [{"text": "Worked on math."}],
-                        }
-                    ],
                 }
             )
             + "\n"
@@ -63,9 +55,9 @@ def main() -> None:
                     "id": "p1",
                     "qid": "q1",
                     "type": "explicit",
+                    "item_type": "frq",
                     "question": "Who is it?",
                     "answer": "Ada Lovelace",
-                    "difficulty": 1,
                 }
             )
             + "\n"
@@ -75,7 +67,6 @@ def main() -> None:
         assert len(synth) == 1
         assert synth[0].name == "Ada Lovelace"
         assert synth.get_qa("p1")[0].question == "Who is it?"
-        assert synth[0].sections[0].text == "Worked on math."
 
         synth_sampled = PersonaDataset(personas_path, qa_path, sample_size=0)
         assert len(synth_sampled) == 0

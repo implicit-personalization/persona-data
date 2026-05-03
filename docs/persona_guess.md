@@ -44,10 +44,9 @@ game = games[0]
 turns = games.get_qa(game.game_id)
 turns = games.get_qa(game.game_id, player="A")
 
-questions = games.questions(game.game_id, player="B")
 ```
 
-`get_qa()` returns typed `Turn` records. `questions()` returns question strings only.
+`get_qa()` returns typed `Turn` records.
 
 ## Notes
 

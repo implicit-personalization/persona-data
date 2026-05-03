@@ -140,4 +140,4 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 The model should then reply with a single letter. Compare it against `correct` to score the response.
 
-See [SynthPersona](synth_persona.md) for filtering QA pairs by `type` and `difficulty`.
+See [SynthPersona](synth_persona.md) for filtering QA pairs by `type` and `item_type`.

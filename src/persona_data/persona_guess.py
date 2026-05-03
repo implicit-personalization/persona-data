@@ -72,8 +72,3 @@ class PersonaGuessDataset:
     ) -> list[Turn]:
         game = self._games_by_id[game_id]
         return [t for t in game.turns if player is None or t.asker == player]
-
-    def questions(
-        self, game_id: str, player: Literal["A", "B"] | None = None
-    ) -> list[str]:
-        return [t.question for t in self.get_qa(game_id, player)]

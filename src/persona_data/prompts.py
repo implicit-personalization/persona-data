@@ -17,12 +17,13 @@ _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this pers
 
 BASELINE_PERSONA_ID = "baseline"
 BASELINE_PERSONA_NAME = "Assistant"
-PromptMode = Literal["roleplay", "conversational"]
+
+_PERSONA_VIEWS = {"templated": "templated_view", "biography": "biography_view"}
 
 
 def mc_answer_only_instruction(n_choices: int) -> str:
     """Return the trailing answer-only instruction for an MC prompt."""
-    if n_choices < 1 or n_choices > len(_LETTERS):
+    if not 1 <= n_choices <= len(_LETTERS):
         raise ValueError(f"n_choices={n_choices} outside [1, {len(_LETTERS)}]")
     labels = ", ".join(_LETTERS[:n_choices])
     return f"Answer only with the correct choice label ({labels})."
@@ -31,7 +32,7 @@ def mc_answer_only_instruction(n_choices: int) -> str:
 def format_prompt(
     persona: PersonaData | str | None = None,
     variant: Literal["baseline", "templated", "biography"] = BASELINE_PERSONA_ID,
-    mode: PromptMode = "roleplay",
+    mode: Literal["roleplay", "conversational"] = "roleplay",
 ) -> str:
     """Build a standard persona system prompt.
 
@@ -40,48 +41,35 @@ def format_prompt(
             the persona-less Assistant baseline.
         variant: Which standard view to read when ``persona`` is a
             ``PersonaData`` object. Ignored for raw profile text.
-        mode: Prompt style selector.
-            - "roleplay": plain persona prompt
-            - "conversational": persona prompt with a natural chat instruction
-
-    Raises:
-        ValueError: If `mode` or `variant` is not supported, or a persona is
-            required but missing.
+        mode: ``"roleplay"`` for the plain persona prompt, or
+            ``"conversational"`` to append a natural chat instruction.
     """
+    if mode not in ("roleplay", "conversational"):
+        raise ValueError(f"Unsupported mode: {mode!r}")
+
     if isinstance(persona, str):
         profile_text = persona
     elif variant == BASELINE_PERSONA_ID:
         profile_text = BASELINE_PERSONA_NAME
-    elif variant == "templated":
-        if persona is None:
-            raise ValueError(f"variant {variant!r} requires a persona")
-        profile_text = persona.templated_view
-    elif variant == "biography":
-        if persona is None:
-            raise ValueError(f"variant {variant!r} requires a persona")
-        profile_text = persona.biography_view
-    else:
+    elif variant not in _PERSONA_VIEWS:
         raise ValueError(f"Unsupported persona prompt variant: {variant!r}")
+    elif persona is None:
+        raise ValueError(f"variant {variant!r} requires a persona")
+    else:
+        profile_text = getattr(persona, _PERSONA_VIEWS[variant])
 
     base = BASE_ROLEPLAY_PROMPT.format(persona=profile_text)
-    if mode == "conversational":
-        return base + _CONVERSATIONAL_SUFFIX
-    if mode != "roleplay":
-        raise ValueError(f"Unsupported mode: {mode!r}")
-    return base
-
-
-def _format_mc_question_prompt(qa: QAPair) -> str:
-    lines = [qa.question, ""]
-    for i, choice in enumerate(qa.choices):
-        lines.append(f"{_LETTERS[i]}. {choice}")
-    return "\n".join(lines)
+    return base + _CONVERSATIONAL_SUFFIX if mode == "conversational" else base
 
 
 def format_mc_question(qa: QAPair) -> str:
     """Format an MC question and append the answer-only instruction."""
-    instruction = mc_answer_only_instruction(len(qa.choices))
-    return f"{_format_mc_question_prompt(qa).rstrip()}\n\n{instruction}"
+    lines = [qa.question, ""]
+    for i, choice in enumerate(qa.choices):
+        lines.append(f"{_LETTERS[i]}. {choice}")
+    lines.append("")
+    lines.append(mc_answer_only_instruction(len(qa.choices)))
+    return "\n".join(lines)
 
 
 def mc_correct_letter(qa: QAPair) -> str:
@@ -92,11 +80,10 @@ def mc_correct_letter(qa: QAPair) -> str:
 
 
 def supports_system_role(tokenizer) -> bool:
-    """Check if tokenizer's chat template supports the 'system' role."""
+    """Check if the tokenizer's chat template supports the 'system' role."""
     try:
         tokenizer.apply_chat_template(
-            [{"role": "system", "content": "test"}],
-            tokenize=False,
+            [{"role": "system", "content": "test"}], tokenize=False
         )
         return True
     except Exception:
@@ -104,10 +91,10 @@ def supports_system_role(tokenizer) -> bool:
 
 
 def normalize_messages(messages: list[dict[str, str]]) -> list[dict[str, str]]:
-    """Merge any leading system message into the first user message.
+    """Merge a leading system message into the first user message.
 
-    Only needed when the tokenizer's chat template doesn't support
-    the "system" role (e.g., Gemma 2).
+    Only needed when the tokenizer's chat template doesn't support the
+    "system" role (e.g., Gemma 2).
     """
     if not messages or messages[0]["role"] != "system":
         return messages
@@ -129,22 +116,18 @@ def format_messages(
     """Format a conversation for the model using its chat template.
 
     Args:
-        messages: List of message dicts with "role" and "content" keys.
-                 Can include "system", "user", and "assistant" roles.
-        tokenizer: The tokenizer with chat template support.
-        add_generation_prompt: When False (default, extraction/training),
-            ``messages`` is expected to end with an ``assistant`` turn whose
-            content is the response to score. When True (inference), the
-            generation-prompt prefix (e.g. ``<start_of_turn>model``) is
-            appended so the rendered string is ready to feed to ``generate``.
+        messages: List of ``{"role", "content"}`` dicts. Roles may be
+            ``system``, ``user``, or ``assistant``.
+        tokenizer: Tokenizer with chat-template support.
+        add_generation_prompt: When ``False`` (extraction/training),
+            ``messages`` ends with the assistant turn to score, and the
+            returned index points at its first token. When ``True``
+            (inference), the generation-prompt prefix is appended and the
+            index equals the prompt length — slice generated sequences with
+            ``sequences[:, response_start_idx:]``.
 
     Returns:
-        full_prompt: The full formatted prompt as a string.
-        response_start_idx: Token index where the assistant response begins.
-            With ``add_generation_prompt=False`` this points to the first
-            token of the last assistant message in ``messages``. With
-            ``add_generation_prompt=True`` it equals the prompt length, i.e.
-            the index of the first token the model will generate.
+        ``(full_prompt, response_start_idx)``.
     """
     if not supports_system_role(tokenizer):
         messages = normalize_messages(messages)
@@ -153,19 +136,16 @@ def format_messages(
         messages, tokenize=False, add_generation_prompt=add_generation_prompt
     )
 
-    if add_generation_prompt:
-        prefix_messages = messages
-    elif len(messages) > 1:
-        prefix_messages = messages[:-1]
-    else:
-        prefix_messages = messages
-
-    prompt_without_response = tokenizer.apply_chat_template(
+    # The boundary is "everything before the last assistant turn", which is
+    # equivalent to tokenizing all messages with a generation prompt — except
+    # in inference mode, where the boundary is the full prompt itself.
+    prefix_messages = messages if add_generation_prompt else messages[:-1] or messages
+    prefix_ids = tokenizer.apply_chat_template(
         prefix_messages,
         tokenize=True,
         add_generation_prompt=True,
         return_tensors="pt",
     )
-    response_start_idx = prompt_without_response["input_ids"].shape[1]
+    response_start_idx = prefix_ids["input_ids"].shape[1]
 
     return full_prompt, response_start_idx

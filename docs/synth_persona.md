@@ -21,13 +21,12 @@ The default dataset source is `implicit-personalization/synth-persona`. The load
 ## Records
 
 - `PersonaData`: top-level persona record
-- `QAPair`: question-answer pair with type, difficulty, and optional multiple-choice fields
-- `BiographySection`: structured subsection of a persona biography
+- `QAPair`: question-answer pair with type, item_type, and optional multiple-choice fields
 - `Statement`: supporting claim record used by downstream tooling
 
-`Statement` includes `sid`, `category`, `claim`, `support`, and `confidence`.
+`Statement` includes `sid`, `category`, `claim`, and `support_turns`.
 
-`QAPair` includes `qid`, `type`, `question`, `answer`, `difficulty`, `answer_format`, `choices`, `correct_choice_index`, `evidence_sids`, and `tags`.
+`QAPair` includes `qid`, `type`, `item_type`, `question`, `answer`, `choices`, `correct_choice_index`, `evidence_sids`, and `tags`.
 
 ## Persona fields
 
@@ -38,16 +37,7 @@ The default dataset source is `implicit-personalization/synth-persona`. The load
 - `templated_view`
 - `biography_view`
 - `statements_view`
-- `sections`
 - `statements`
-
-It also exposes convenience helpers:
-
-- `get_section(section_id)`
-- `get_sections_by_category(category)`
-- `sections_by_id`
-- `sections_by_category`
-- `section_categories`
 
 It also exposes `name` as a derived property.
 
@@ -57,18 +47,16 @@ It also exposes `name` as a derived property.
 persona = dataset[0]
 
 qa_pairs = dataset.get_qa(persona.id)
-qa_pairs = dataset.get_qa(persona.id, type="explicit", difficulty=[2, 3])
+qa_pairs = dataset.get_qa(persona.id, type="explicit", item_type="mcq")
 
-questions = dataset.questions(persona.id, type="implicit")
 loaded_persona = dataset.get_persona("p1")
 ```
 
-`get_qa()` returns typed `QAPair` records. `questions()` returns question strings only.
+`get_qa()` returns typed `QAPair` records.
 
 ## Notes
 
-- `difficulty` accepts one level or a list of levels.
 - `type` can be `"explicit"` or `"implicit"`.
-- `sample_size` can limit how many personas are kept in memory.
+- `item_type` can be `"mcq"` (multiple-choice) or `"frq"` (free-response).
 - `sample_size` keeps a leading slice rather than sampling randomly.
 - The loader keeps the dataset eager and notebook-friendly rather than streaming.

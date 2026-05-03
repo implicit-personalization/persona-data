@@ -49,7 +49,7 @@ The release workflow also runs `tests/smoke_test.py` against the built wheel and
 ```
 src/persona_data/
 ├── __init__.py
-├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, BiographySection, Statement
+├── synth_persona.py       # SynthPersonaDataset, PersonaDataset, PersonaData, QAPair, Statement
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
 ├── nemotron_personas.py   # NemotronPersonasFranceDataset, NemotronPersonasUSADataset
 ├── prompts.py             # format_prompt, format_mc_question, format_messages
@@ -71,10 +71,9 @@ persona = dataset[0]
 persona.name              # "Ethan Robinson"
 persona.templated_view    # short attribute-based system prompt
 persona.biography_view    # full biography text
-persona.sections          # list of BiographySection
+persona.statements        # list of Statement
 
-qa_pairs = dataset.get_qa(persona.id, type="implicit", difficulty=[1, 2])
-questions = dataset.questions(persona.id, type="explicit")
+qa_pairs = dataset.get_qa(persona.id, type="implicit", item_type="mcq")
 ```
 
 ### PersonaGuess
@@ -85,7 +84,6 @@ from persona_data.persona_guess import PersonaGuessDataset
 games = PersonaGuessDataset()
 game = games[0]
 turns = games.get_qa(game.game_id, player="A")
-questions = games.questions(game.game_id, player="B")
 ```
 
 ## Prompt formatting

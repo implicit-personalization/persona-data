@@ -4,28 +4,22 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Literal
 
-# NOTE: The loader intentionally drops provenance/curation fields that are not used
-# by persona-data, persona-ui, or persona-vectors. We keep `evidence_sids` because
-# the ablation tooling still relies on it.
-# Dropped fields: design_notes, family_name, source_candidate_*, bank_id, axis,
-# curation_note, validation, evidence_claims, evidence_quotes.
-
 
 @dataclass
 class QAPair:
     qid: str
     type: Literal["explicit", "implicit"]
+    item_type: Literal["mcq", "frq"]
+    scope: Literal["individual", "shared"]
     question: str
     answer: str
-    difficulty: int  # 1 = easy, 2 = medium, 3 = hard
-    answer_format: str = ""  # "free_text" or "choice"
     choices: list[str] = field(default_factory=list)
     correct_choice_index: int | None = None
     evidence_sids: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
     def __repr__(self):
-        return f"QAPair(qid={self.qid!r}, type={self.type!r}, difficulty={self.difficulty})"
+        return f"QAPair(qid={self.qid!r}, type={self.type!r}, item_type={self.item_type!r})"
 
 
 @dataclass
@@ -33,24 +27,10 @@ class Statement:
     sid: str
     category: str
     claim: str
-    support: list[dict] = field(default_factory=list)
-    confidence: str = ""
+    support_turns: list[int] = field(default_factory=list)
 
     def __repr__(self):
         return f"Statement(sid={self.sid!r}, category={self.category!r})"
-
-
-@dataclass
-class BiographySection:
-    """A semantically coherent segment of a persona biography."""
-
-    section_id: str
-    category: str  # e.g. "upbringing", "education", "career"
-    title: str
-    text: str  # Concatenated paragraph texts
-
-    def __repr__(self):
-        return f"BiographySection(id={self.section_id!r}, category={self.category!r})"
 
 
 @dataclass
@@ -60,35 +40,11 @@ class PersonaData:
     templated_view: str
     biography_view: str
     statements_view: str = ""
-    # transcript: str = "" # NOTE: This is not needed for our usecase for now
-    sections: list[BiographySection] = field(default_factory=list)
     statements: list[Statement] = field(default_factory=list)
 
     @property
     def name(self) -> str:
         return f"{self.persona['first_name']} {self.persona['last_name']}"
-
-    @property
-    def sections_by_id(self) -> dict[str, BiographySection]:
-        return {section.section_id: section for section in self.sections}
-
-    @property
-    def sections_by_category(self) -> dict[str, list[BiographySection]]:
-        grouped: dict[str, list[BiographySection]] = defaultdict(list)
-        for section in self.sections:
-            grouped[section.category].append(section)
-        return dict(grouped)
-
-    @property
-    def section_categories(self) -> list[str]:
-        """Unique section categories in order."""
-        return list(self.sections_by_category)
-
-    def get_section(self, section_id: str) -> BiographySection | None:
-        return self.sections_by_id.get(section_id)
-
-    def get_sections_by_category(self, category: str) -> list[BiographySection]:
-        return self.sections_by_category.get(category, [])
 
     def __repr__(self):
         return f"PersonaData(id={self.id!r}, name={self.name!r})"
@@ -114,29 +70,18 @@ class PersonaDataset:
                 if sample_size is not None and len(self._personas) >= sample_size:
                     break
                 d = json.loads(line)
-                sections = [
-                    BiographySection(
-                        section_id=sec["section_id"],
-                        category=sec["category"],
-                        title=sec["title"],
-                        text="\n\n".join(p["text"] for p in sec.get("paragraphs", [])),
-                    )
-                    for sec in d.get("sections", [])
-                ]
                 persona = PersonaData(
                     id=d["id"],
                     persona=d["persona"],
                     templated_view=d["templated_view"],
                     biography_view=d.get("biography_view", ""),
                     statements_view=d.get("statements_view", ""),
-                    sections=sections,
                     statements=[
                         Statement(
                             sid=s["sid"],
                             category=s["category"],
                             claim=s["claim"],
-                            support=s.get("support", []),
-                            confidence=s.get("confidence", ""),
+                            support_turns=s.get("support_turns", []),
                         )
                         for s in d.get("statements", [])
                     ],
@@ -157,11 +102,11 @@ class PersonaDataset:
                     QAPair(
                         qid=d["qid"],
                         type=d["type"],
+                        item_type=d["item_type"],
+                        scope=d["scope"],
                         question=d["question"],
                         answer=d["answer"],
-                        difficulty=d["difficulty"],
-                        answer_format=d.get("answer_format", "free_text"),
-                        choices=d.get("choices", []),
+                        choices=d.get("choices") or [],
                         correct_choice_index=d.get("correct_choice_index"),
                         evidence_sids=d.get("evidence_sids", []),
                         tags=d.get("tags", []),
@@ -187,25 +132,18 @@ class PersonaDataset:
         self,
         persona_id: str,
         type: Literal["explicit", "implicit"] | None = None,
-        difficulty: int | list[int] | None = None,
+        item_type: Literal["mcq", "frq"] | None = None,
+        scope: Literal["individual", "shared"] | None = None,
     ) -> list[QAPair]:
-        """Return QA pairs for a persona, optionally filtered by type and/or difficulty."""
+        """Return QA pairs for a persona, optionally filtered by type / item_type."""
         pairs = self._qa.get(persona_id, [])
         if type is not None:
             pairs = [p for p in pairs if p.type == type]
-        if difficulty is not None:
-            levels = {difficulty} if isinstance(difficulty, int) else set(difficulty)
-            pairs = [p for p in pairs if p.difficulty in levels]
+        if item_type is not None:
+            pairs = [p for p in pairs if p.item_type == item_type]
+        if scope is not None:
+            pairs = [p for p in pairs if p.scope == scope]
         return pairs
-
-    def questions(
-        self,
-        persona_id: str,
-        type: Literal["explicit", "implicit"] | None = None,
-        difficulty: int | list[int] | None = None,
-    ) -> list[str]:
-        """Like get_qa but returns question strings only."""
-        return [qa.question for qa in self.get_qa(persona_id, type, difficulty)]
 
 
 class SynthPersonaDataset(PersonaDataset):

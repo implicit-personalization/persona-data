@@ -101,10 +101,9 @@ def test_format_mc_question_appends_instruction():
     qa = QAPair(
         qid="q1",
         type="explicit",
+        item_type="mcq",
         question="Pick one?",
         answer="Beta",
-        difficulty=1,
-        answer_format="choice",
         choices=["Alpha", "Beta"],
         correct_choice_index=1,
     )
@@ -129,21 +128,12 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "persona": {"first_name": "Ada", "last_name": "Lovelace"},
             "templated_view": "Ada Lovelace",
             "biography_view": "Bio one",
-            "sections": [
-                {
-                    "section_id": "s1",
-                    "category": "career",
-                    "title": "Career",
-                    "paragraphs": [{"text": "Worked on math."}],
-                }
-            ],
         },
         {
             "id": "p2",
             "persona": {"first_name": "Grace", "last_name": "Hopper"},
             "templated_view": "Grace Hopper",
             "biography_view": "Bio two",
-            "sections": [],
         },
     ]
     qa_rows = [
@@ -151,25 +141,27 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "id": "p1",
             "qid": "q1",
             "type": "explicit",
+            "item_type": "frq",
             "question": "Who is it?",
             "answer": "Ada",
-            "difficulty": 1,
         },
         {
             "id": "p1",
             "qid": "q2",
             "type": "implicit",
+            "item_type": "mcq",
             "question": "Hint?",
             "answer": "math",
-            "difficulty": 3,
+            "choices": ["math", "science"],
+            "correct_choice_index": 0,
         },
         {
             "id": "p2",
             "qid": "q3",
             "type": "explicit",
+            "item_type": "frq",
             "question": "Who?",
             "answer": "Grace",
-            "difficulty": 2,
         },
     ]
 
@@ -185,19 +177,17 @@ def test_persona_dataset_loads_personas_and_qa(tmp_path: Path):
     assert len(ds) == 2
     assert [p.id for p in ds] == ["p1", "p2"]
     assert ds[0].name == "Ada Lovelace"
-    assert ds[0].sections[0].text == "Worked on math."
     assert ds.get_persona("p2").name == "Grace Hopper"
     assert ds.get_persona("missing") is None
 
 
-def test_persona_dataset_qa_filters_by_type_and_difficulty(tmp_path: Path):
+def test_persona_dataset_qa_filters_by_type_and_item_type(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     ds = PersonaDataset(personas_path, qa_path)
 
     assert [q.qid for q in ds.get_qa("p1")] == ["q1", "q2"]
     assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1"]
-    assert [q.qid for q in ds.get_qa("p1", difficulty=[1, 2])] == ["q1"]
-    assert ds.questions("p1", type="implicit") == ["Hint?"]
+    assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2"]
 
 
 def test_persona_dataset_sample_size_drops_trailing_personas_and_their_qa(
@@ -257,7 +247,6 @@ def test_persona_guess_loads_and_filters_by_player(tmp_path: Path):
     assert [g.game_id for g in games] == ["g1", "g2"]
     assert [t.question for t in games.get_qa("g1")] == ["Q1a", "Q1b"]
     assert [t.question for t in games.get_qa("g1", player="A")] == ["Q1a"]
-    assert games.questions("g1", player="B") == ["Q1b"]
 
 
 def test_persona_guess_sample_size_limits_games(tmp_path: Path):
