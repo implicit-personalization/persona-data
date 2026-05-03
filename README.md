@@ -1,6 +1,7 @@
 # persona-data
 
 [![Docs](https://img.shields.io/badge/docs-view-purple?logo=materialformkdocs)](https://implicit-personalization.github.io/persona-data/)
+[![PyPI](https://img.shields.io/pypi/v/persona-data?logo=pypi&label=PyPI)](https://pypi.org/project/persona-data/)
 
 Shared dataset loading, prompt formatting, and environment utilities for the [implicit-personalization](https://github.com/implicit-personalization) projects.
 

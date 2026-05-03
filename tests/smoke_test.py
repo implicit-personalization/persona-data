@@ -56,6 +56,7 @@ def main() -> None:
                     "qid": "q1",
                     "type": "explicit",
                     "item_type": "frq",
+                    "scope": "individual",
                     "question": "Who is it?",
                     "answer": "Ada Lovelace",
                 }
