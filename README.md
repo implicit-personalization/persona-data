@@ -54,7 +54,7 @@ src/persona_data/
 ├── persona_guess.py       # PersonaGuessDataset, GameRecord, Turn
 ├── nemotron_personas.py   # NemotronPersonasFranceDataset, NemotronPersonasUSADataset
 ├── prompts.py             # format_prompt, format_mc_question, format_messages
-└── environment.py         # load_env, set_seed, get_device, get_artifacts_dir
+└── environment.py         # set_seed, get_device, get_artifacts_dir
 ```
 
 ## Datasets
@@ -113,9 +113,8 @@ For multiple-choice prompts, use `format_mc_question(qa)` to render the question
 ## Environment helpers
 
 ```python
-from persona_data.environment import load_env, set_seed, get_device, get_artifacts_dir
+from persona_data.environment import set_seed, get_device, get_artifacts_dir
 
-load_env()            # loads .env from cwd (searches parent dirs)
 set_seed(1337)        # sets random, numpy, and torch seeds
 device = get_device() # cuda > mps > cpu
 ```

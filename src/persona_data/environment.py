@@ -4,15 +4,6 @@ from pathlib import Path
 
 import numpy as np
 import torch
-from dotenv import load_dotenv
-
-
-def load_env() -> None:
-    """Load environment variables from .env file.
-
-    Searches the current working directory and parent directories.
-    """
-    load_dotenv()
 
 
 def get_artifacts_dir() -> Path:
