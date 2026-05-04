@@ -102,6 +102,7 @@ def test_format_mc_question_appends_instruction():
         qid="q1",
         type="explicit",
         item_type="mcq",
+        scope="individual",
         question="Pick one?",
         answer="Beta",
         choices=["Alpha", "Beta"],
@@ -142,6 +143,7 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "qid": "q1",
             "type": "explicit",
             "item_type": "frq",
+            "scope": "individual",
             "question": "Who is it?",
             "answer": "Ada",
         },
@@ -150,16 +152,51 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "qid": "q2",
             "type": "implicit",
             "item_type": "mcq",
+            "scope": "individual",
             "question": "Hint?",
             "answer": "math",
             "choices": ["math", "science"],
             "correct_choice_index": 0,
         },
         {
-            "id": "p2",
+            "id": "p1",
             "qid": "q3",
             "type": "explicit",
+            "item_type": "mcq",
+            "scope": "individual",
+            "question": "Field?",
+            "answer": "math",
+            "choices": ["math", "art"],
+            "correct_choice_index": 0,
+        },
+        {
+            "id": "p1",
+            "qid": "q4",
+            "type": "implicit",
+            "item_type": "mcq",
+            "scope": "shared",
+            "question": "Shared implicit?",
+            "answer": "yes",
+            "choices": ["yes", "no"],
+            "correct_choice_index": 0,
+        },
+        {
+            "id": "p1",
+            "qid": "q5",
+            "type": "explicit",
+            "item_type": "mcq",
+            "scope": "shared",
+            "question": "Shared explicit?",
+            "answer": "yes",
+            "choices": ["yes", "no"],
+            "correct_choice_index": 0,
+        },
+        {
+            "id": "p2",
+            "qid": "q6",
+            "type": "explicit",
             "item_type": "frq",
+            "scope": "individual",
             "question": "Who?",
             "answer": "Grace",
         },
@@ -185,9 +222,29 @@ def test_persona_dataset_qa_filters_by_type_and_item_type(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     ds = PersonaDataset(personas_path, qa_path)
 
-    assert [q.qid for q in ds.get_qa("p1")] == ["q1", "q2"]
-    assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1"]
-    assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2"]
+    assert [q.qid for q in ds.get_qa("p1")] == ["q1", "q2", "q3", "q4", "q5"]
+    assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1", "q3", "q5"]
+    assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2", "q3", "q4", "q5"]
+    assert [q.qid for q in ds.get_qa("p1", scope="shared")] == ["q4", "q5"]
+
+
+def test_persona_dataset_train_test_split_uses_individual_for_train(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+
+    train, test = ds.train_test_split("p1")
+    assert [q.qid for q in train] == ["q3"]
+    assert [q.qid for q in test] == ["q4", "q5"]
+
+
+def test_persona_dataset_train_test_split_respects_n_train(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+
+    train, _ = ds.train_test_split(
+        "p1", n_train=2, train_type=None, train_item_type="mcq"
+    )
+    assert [q.qid for q in train] == ["q2", "q3"]
 
 
 def test_persona_dataset_sample_size_drops_trailing_personas_and_their_qa(

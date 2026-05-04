@@ -145,6 +145,33 @@ class PersonaDataset:
             pairs = [p for p in pairs if p.scope == scope]
         return pairs
 
+    def train_test_split(
+        self,
+        persona_id: str,
+        *,
+        n_train: int = 25,
+        train_type: Literal["explicit", "implicit"] | None = "explicit",
+        train_item_type: Literal["mcq", "frq"] | None = "mcq",
+    ) -> tuple[list[QAPair], list[QAPair]]:
+        """Return ``(train, test)`` QA splits for one persona.
+
+        Train: ``scope='individual'`` QAs — persona-specific items used to
+        derive a persona representation (Doc-to-LoRA conditioning, steering
+        vector, SAE features, …). Capped at ``n_train`` and by default
+        narrowed to explicit MCQs.
+        Test: ``scope='shared'`` QAs — the questions every persona answers,
+        kept as a held-out evaluation set with whatever mix of
+        explicit/implicit is present in the data.
+        """
+        train = self.get_qa(
+            persona_id,
+            type=train_type,
+            item_type=train_item_type,
+            scope="individual",
+        )[:n_train]
+        test = self.get_qa(persona_id, scope="shared")
+        return train, test
+
 
 class SynthPersonaDataset(PersonaDataset):
     """SynthPersona dataset loaded from HuggingFace."""
