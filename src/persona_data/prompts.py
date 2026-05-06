@@ -1,6 +1,11 @@
 from typing import Literal
 
-from persona_data.synth_persona import PersonaData, QAPair
+from persona_data.synth_persona import (
+    BASELINE_PERSONA_ID,
+    BASELINE_PERSONA_NAME,
+    PersonaData,
+    QAPair,
+)
 
 _LETTERS = "ABCDEFG"
 
@@ -15,9 +20,6 @@ Do not mention that you are an AI model.
 
 _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this person."
 
-BASELINE_PERSONA_ID = "baseline"
-BASELINE_PERSONA_NAME = "Assistant"
-
 _PERSONA_VIEWS = {"templated": "templated_view", "biography": "biography_view"}
 
 
@@ -30,18 +32,19 @@ def mc_answer_only_instruction(n_choices: int) -> str:
 
 
 def format_prompt(
-    persona: PersonaData | str | None = None,
-    variant: Literal["baseline", "templated", "biography"] = BASELINE_PERSONA_ID,
+    persona: PersonaData | str,
+    variant: Literal["templated", "biography"] = "templated",
     mode: Literal["roleplay", "conversational"] = "roleplay",
 ) -> str:
     """Build a standard persona system prompt.
 
     Args:
-        persona: A ``PersonaData`` object, raw profile text, or ``None`` for
-            the persona-less Assistant baseline.
+        persona: A ``PersonaData`` (any persona, including the baseline
+            loaded as ``dataset.get_persona(BASELINE_PERSONA_ID)``) or raw
+            profile text.
         variant: Which standard view to read when ``persona`` is a
-            ``PersonaData`` object. Ignored for raw profile text.
-        mode: ``"roleplay"`` for the plain persona prompt, or
+            ``PersonaData``. Ignored for raw profile text.
+        mode: ``"roleplay"`` (default) for the plain persona prompt, or
             ``"conversational"`` to append a natural chat instruction.
     """
     if mode not in ("roleplay", "conversational"):
@@ -49,14 +52,10 @@ def format_prompt(
 
     if isinstance(persona, str):
         profile_text = persona
-    elif variant == BASELINE_PERSONA_ID:
-        profile_text = BASELINE_PERSONA_NAME
-    elif variant not in _PERSONA_VIEWS:
-        raise ValueError(f"Unsupported persona prompt variant: {variant!r}")
-    elif persona is None:
-        raise ValueError(f"variant {variant!r} requires a persona")
-    else:
+    elif variant in _PERSONA_VIEWS:
         profile_text = getattr(persona, _PERSONA_VIEWS[variant])
+    else:
+        raise ValueError(f"Unsupported persona prompt variant: {variant!r}")
 
     base = BASE_ROLEPLAY_PROMPT.format(persona=profile_text)
     return base + _CONVERSATIONAL_SUFFIX if mode == "conversational" else base

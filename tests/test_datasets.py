@@ -47,11 +47,10 @@ def test_format_prompt_rejects_unknown_mode():
         format_prompt("hello", mode="mc")
 
 
-def test_format_prompt_baseline_default():
-    """Calling without args yields the persona-less Assistant baseline prompt."""
-    prompt = format_prompt()
-    assert BASELINE_PERSONA_ID == "baseline"
-    assert BASELINE_PERSONA_NAME in prompt
+def test_baseline_persona_id_constant():
+    """BASELINE_PERSONA_ID matches the public id used by the SynthPersona dataset."""
+    assert BASELINE_PERSONA_ID == "baseline_assistant"
+    assert BASELINE_PERSONA_NAME == "Assistant"
 
 
 def test_format_prompt_with_persona_view():
@@ -67,14 +66,15 @@ def test_format_prompt_with_persona_view():
     assert "TEMPLATED" in format_prompt(persona, "templated")
 
 
-def test_format_prompt_requires_persona_for_persona_variants():
-    with pytest.raises(ValueError, match="requires a persona"):
-        format_prompt(variant="biography")
-
-
 def test_format_prompt_rejects_unknown_variant():
+    persona = PersonaData(
+        id="p1",
+        persona={"first_name": "A", "last_name": "B"},
+        templated_view="TEMPLATED",
+        biography_view="BIO",
+    )
     with pytest.raises(ValueError, match="Unsupported persona prompt variant"):
-        format_prompt(variant="statements")  # type: ignore[arg-type]
+        format_prompt(persona, variant="statements")  # type: ignore[arg-type]
 
 
 def test_format_prompt_variant_forwards_mode():
@@ -136,8 +136,19 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "templated_view": "Grace Hopper",
             "biography_view": "Bio two",
         },
+        {
+            "id": BASELINE_PERSONA_ID,
+            "persona": {
+                "first_name": BASELINE_PERSONA_NAME,
+                "last_name": "",
+            },
+            "templated_view": BASELINE_PERSONA_NAME,
+            "biography_view": BASELINE_PERSONA_NAME,
+        },
     ]
     qa_rows = [
+        # Explicit FRQ that shares its bank_id with a shared explicit MCQ
+        # below — leakage filter should drop it from the train split.
         {
             "id": "p1",
             "qid": "q1",
@@ -146,6 +157,7 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "scope": "individual",
             "question": "Who is it?",
             "answer": "Ada",
+            "bank_id": "explicit_name",
         },
         {
             "id": "p1",
@@ -169,6 +181,8 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "choices": ["math", "art"],
             "correct_choice_index": 0,
         },
+        # Shared implicit MCQ whose related_frq_qids include p1-q7 (an
+        # implicit FRQ below) — that FRQ should be dropped from train.
         {
             "id": "p1",
             "qid": "q4",
@@ -179,7 +193,9 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "answer": "yes",
             "choices": ["yes", "no"],
             "correct_choice_index": 0,
+            "bank_id": "implicit_shared_1",
         },
+        # Shared explicit MCQ that collides with q1 via bank_id.
         {
             "id": "p1",
             "qid": "q5",
@@ -190,6 +206,7 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "answer": "yes",
             "choices": ["yes", "no"],
             "correct_choice_index": 0,
+            "bank_id": "explicit_name",
         },
         {
             "id": "p2",
@@ -199,6 +216,26 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "scope": "individual",
             "question": "Who?",
             "answer": "Grace",
+        },
+        # Implicit FRQ used as evidence for shared implicit MCQ q4.
+        {
+            "id": "p1",
+            "qid": "q7",
+            "type": "implicit",
+            "item_type": "frq",
+            "scope": "individual",
+            "question": "How does Ada talk about math?",
+            "answer": "Enthusiastically.",
+        },
+        # Implicit FRQ NOT referenced by any shared MCQ — should survive.
+        {
+            "id": "p1",
+            "qid": "q8",
+            "type": "implicit",
+            "item_type": "frq",
+            "scope": "individual",
+            "question": "How does Ada talk about art?",
+            "answer": "Curiously.",
         },
     ]
 
@@ -211,40 +248,85 @@ def test_persona_dataset_loads_personas_and_qa(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     ds = PersonaDataset(personas_path, qa_path)
 
-    assert len(ds) == 2
-    assert [p.id for p in ds] == ["p1", "p2"]
+    assert len(ds) == 3
+    assert [p.id for p in ds] == ["p1", "p2", BASELINE_PERSONA_ID]
     assert ds[0].name == "Ada Lovelace"
     assert ds.get_persona("p2").name == "Grace Hopper"
+    assert ds.baseline.id == BASELINE_PERSONA_ID
     assert ds.get_persona("missing") is None
+    assert ds.get_persona(BASELINE_PERSONA_ID).templated_view == BASELINE_PERSONA_NAME
+
+
+def test_persona_dataset_baseline_is_a_normal_sampled_persona(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path, sample_size=3)
+
+    assert [p.id for p in ds] == ["p1", "p2", BASELINE_PERSONA_ID]
+    assert ds.baseline is ds[2]
+    assert ds.get_persona(BASELINE_PERSONA_ID) is ds.baseline
 
 
 def test_persona_dataset_qa_filters_by_type_and_item_type(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     ds = PersonaDataset(personas_path, qa_path)
 
-    assert [q.qid for q in ds.get_qa("p1")] == ["q1", "q2", "q3", "q4", "q5"]
+    assert [q.qid for q in ds.get_qa("p1")] == [
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+        "q5",
+        "q7",
+        "q8",
+    ]
     assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1", "q3", "q5"]
     assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2", "q3", "q4", "q5"]
     assert [q.qid for q in ds.get_qa("p1", scope="shared")] == ["q4", "q5"]
 
 
-def test_persona_dataset_train_test_split_uses_individual_for_train(tmp_path: Path):
+def test_persona_dataset_train_test_split_drops_leaking_train_rows(tmp_path: Path):
+    """Train FRQs that share a bank_id or are listed as evidence for a test
+    MCQ are dropped; test set is preserved in full."""
     personas_path, qa_path = _write_persona_fixture(tmp_path)
-    ds = PersonaDataset(personas_path, qa_path)
+    ds = PersonaDataset(
+        personas_path,
+        qa_path,
+        related_frq_qids_by_bank_id={"implicit_shared_1": ["q7"]},
+    )
 
     train, test = ds.train_test_split("p1")
-    assert [q.qid for q in train] == ["q3"]
+    # q1 dropped (bank_id collision with q5), q7 dropped (evidence for q4),
+    # q8 kept (no leak).
+    assert [q.qid for q in train] == ["q8"]
     assert [q.qid for q in test] == ["q4", "q5"]
 
 
 def test_persona_dataset_train_test_split_respects_n_train(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
+    # No bank mapping -> no implicit leakage filter; q1 still drops via bank_id.
     ds = PersonaDataset(personas_path, qa_path)
 
-    train, _ = ds.train_test_split(
-        "p1", n_train=2, train_type=None, train_item_type="mcq"
-    )
-    assert [q.qid for q in train] == ["q2", "q3"]
+    train, _ = ds.train_test_split("p1", n_train=1)
+    assert [q.qid for q in train] == ["q7"]
+
+
+def test_persona_dataset_train_test_split_seed_shuffles_reproducibly(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+
+    a, _ = ds.train_test_split("p1", n_train=None, seed=0)
+    default_seed, _ = ds.train_test_split("p1", n_train=None)
+    b, _ = ds.train_test_split("p1", n_train=None, seed=0)
+    c, _ = ds.train_test_split("p1", n_train=None, seed=1)
+    no_seed, _ = ds.train_test_split("p1", n_train=None, seed=None)
+
+    qids_a = [q.qid for q in a]
+    qids_no_seed = [q.qid for q in no_seed]
+    assert qids_a == [q.qid for q in default_seed]
+    assert qids_a == [q.qid for q in b]  # reproducible
+    assert sorted(qids_a) == sorted(qids_no_seed)  # same items, possibly reordered
+    # at least one of the two seeds reorders relative to dataset order
+    assert qids_a != qids_no_seed or [q.qid for q in c] != qids_no_seed
 
 
 def test_persona_dataset_sample_size_drops_trailing_personas_and_their_qa(

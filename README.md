@@ -75,6 +75,9 @@ persona.biography_view    # full biography text
 persona.statements        # list of Statement
 
 qa_pairs = dataset.get_qa(persona.id, type="implicit", item_type="mcq")
+
+# Leakage-aware split: train on individual FRQs, test on shared MCQs.
+train_qa, test_qa = dataset.train_test_split(persona.id, n_train=50)
 ```
 
 ### PersonaGuess
@@ -102,9 +105,17 @@ messages = [
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
-`format_prompt` accepts raw profile text, a `PersonaData` plus one of the standard variants (`"templated"` or `"biography"`), or no persona for the `"baseline"` prompt. It also accepts `mode="roleplay"` (default) and `mode="conversational"`.
+`format_prompt` accepts a `PersonaData` plus one of the standard variants (`"templated"` or `"biography"`), or raw profile text. It also accepts `mode="roleplay"` (default) and `mode="conversational"`.
 
-When iterating over variants in an experiment, pass `"templated"` or `"biography"` to `format_prompt(persona, variant)`. Calling `format_prompt()` yields the persona-less Assistant baseline prompt. Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.prompts` for the shared baseline identity in artifacts and UI labels.
+The persona-less Assistant baseline is just another persona in the dataset under `BASELINE_PERSONA_ID` (`"baseline_assistant"`). It appears in normal iteration when loaded, and `dataset.baseline` retrieves it directly:
+
+```python
+dataset = SynthPersonaDataset()
+baseline = dataset.baseline  # PersonaData | None
+system_prompt = format_prompt(baseline, "templated")
+```
+
+Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` (both in `persona_data.prompts`) for artifact naming and UI labels.
 
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 

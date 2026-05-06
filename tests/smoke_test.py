@@ -31,7 +31,6 @@ def _write_parquet(path: Path, rows: list[dict]) -> None:
 def main() -> None:
     assert get_device().type in {"cpu", "cuda", "mps"}
     assert format_prompt("hello")
-    assert format_prompt()
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)

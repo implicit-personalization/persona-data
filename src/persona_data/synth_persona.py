@@ -1,8 +1,12 @@
 import json
+import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterator, Literal
+
+BASELINE_PERSONA_ID = "baseline_assistant"
+BASELINE_PERSONA_NAME = "Assistant"
 
 
 @dataclass
@@ -15,6 +19,8 @@ class QAPair:
     answer: str
     choices: list[str] = field(default_factory=list)
     correct_choice_index: int | None = None
+    bank_id: str | None = None
+    related_frq_qids: list[str] = field(default_factory=list)
     evidence_sids: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
 
@@ -44,74 +50,89 @@ class PersonaData:
 
     @property
     def name(self) -> str:
-        return f"{self.persona['first_name']} {self.persona['last_name']}"
+        return f"{self.persona['first_name']} {self.persona['last_name']}".strip()
 
     def __repr__(self):
         return f"PersonaData(id={self.id!r}, name={self.name!r})"
 
 
+def _parse_persona(d: dict) -> "PersonaData":
+    return PersonaData(
+        id=d["id"],
+        persona=d["persona"],
+        templated_view=d["templated_view"],
+        biography_view=d.get("biography_view", ""),
+        statements_view=d.get("statements_view", ""),
+        statements=[
+            Statement(
+                sid=s["sid"],
+                category=s["category"],
+                claim=s["claim"],
+                support_turns=s.get("support_turns", []),
+            )
+            for s in d.get("statements", [])
+        ],
+    )
+
+
+def _parse_qa(d: dict, related_map: dict[str, list[str]]) -> "QAPair":
+    bank_id = d.get("bank_id")
+    return QAPair(
+        qid=d["qid"],
+        type=d["type"],
+        item_type=d["item_type"],
+        scope=d["scope"],
+        question=d["question"],
+        answer=d["answer"],
+        choices=d.get("choices") or [],
+        correct_choice_index=d.get("correct_choice_index"),
+        bank_id=bank_id,
+        related_frq_qids=d.get("related_frq_qids") or related_map.get(bank_id, []),
+        evidence_sids=d.get("evidence_sids", []),
+        tags=d.get("tags", []),
+    )
+
+
+def _read_jsonl(path: Path | str) -> Iterator[dict]:
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
+
+
 class PersonaDataset:
-    """Persona dataset loaded from local JSONL files."""
+    """Persona dataset loaded from local JSONL files.
+
+    ``sample_size`` keeps the leading N personas from the JSONL file. The
+    persona-less Assistant baseline is represented as an ordinary persona row
+    with id ``BASELINE_PERSONA_ID``.
+    """
 
     def __init__(
         self,
         personas_path: Path | str,
         qa_path: Path | str,
         *,
+        related_frq_qids_by_bank_id: dict[str, list[str]] | None = None,
         sample_size: int | None = None,
     ) -> None:
-        self.sample_size = sample_size
         self._personas: list[PersonaData] = []
         self._personas_by_id: dict[str, PersonaData] = {}
-        with open(personas_path) as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                if sample_size is not None and len(self._personas) >= sample_size:
-                    break
-                d = json.loads(line)
-                persona = PersonaData(
-                    id=d["id"],
-                    persona=d["persona"],
-                    templated_view=d["templated_view"],
-                    biography_view=d.get("biography_view", ""),
-                    statements_view=d.get("statements_view", ""),
-                    statements=[
-                        Statement(
-                            sid=s["sid"],
-                            category=s["category"],
-                            claim=s["claim"],
-                            support_turns=s.get("support_turns", []),
-                        )
-                        for s in d.get("statements", [])
-                    ],
-                )
-                self._personas.append(persona)
-                self._personas_by_id[persona.id] = persona
+
+        for d in _read_jsonl(personas_path):
+            if sample_size is not None and len(self._personas) >= sample_size:
+                break
+            persona = _parse_persona(d)
+            self._personas.append(persona)
+            self._personas_by_id[persona.id] = persona
 
         loaded_ids = set(self._personas_by_id)
+        related_map = related_frq_qids_by_bank_id or {}
         self._qa: dict[str, list[QAPair]] = defaultdict(list)
-        with open(qa_path) as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                d = json.loads(line)
-                if d["id"] not in loaded_ids:
-                    continue
-                self._qa[d["id"]].append(
-                    QAPair(
-                        qid=d["qid"],
-                        type=d["type"],
-                        item_type=d["item_type"],
-                        scope=d["scope"],
-                        question=d["question"],
-                        answer=d["answer"],
-                        choices=d.get("choices") or [],
-                        correct_choice_index=d.get("correct_choice_index"),
-                        evidence_sids=d.get("evidence_sids", []),
-                        tags=d.get("tags", []),
-                    )
-                )
+        for d in _read_jsonl(qa_path):
+            if d["id"] in loaded_ids:
+                self._qa[d["id"]].append(_parse_qa(d, related_map))
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(n_personas={len(self._personas)})"
@@ -127,6 +148,11 @@ class PersonaDataset:
 
     def get_persona(self, persona_id: str) -> PersonaData | None:
         return self._personas_by_id.get(persona_id)
+
+    @property
+    def baseline(self) -> PersonaData | None:
+        """Persona-less Assistant baseline if loaded, else ``None``."""
+        return self._personas_by_id.get(BASELINE_PERSONA_ID)
 
     def get_qa(
         self,
@@ -149,27 +175,43 @@ class PersonaDataset:
         self,
         persona_id: str,
         *,
-        n_train: int = 25,
-        train_type: Literal["explicit", "implicit"] | None = "explicit",
-        train_item_type: Literal["mcq", "frq"] | None = "mcq",
+        n_train: int | None = 50,
+        seed: int | None = 0,
     ) -> tuple[list[QAPair], list[QAPair]]:
-        """Return ``(train, test)`` QA splits for one persona.
+        """Return leakage-filtered ``(train, test)`` QA splits for one persona.
 
-        Train: ``scope='individual'`` QAs — persona-specific items used to
-        derive a persona representation (Doc-to-LoRA conditioning, steering
-        vector, SAE features, …). Capped at ``n_train`` and by default
-        narrowed to explicit MCQs.
-        Test: ``scope='shared'`` QAs — the questions every persona answers,
-        kept as a held-out evaluation set with whatever mix of
-        explicit/implicit is present in the data.
+        Train: individual free-response questions (explicit and implicit).
+        Test:  shared multiple-choice questions (explicit and implicit) —
+               the same item bank for every persona, so per-persona test
+               scores are directly comparable.
+
+        Some shared MCQs are constructed from individual FRQs of the same
+        persona — explicit MCQs reuse the FRQ's ``bank_id`` slot, and
+        implicit shared MCQs list the source FRQ qids in
+        ``related_frq_qids``. To avoid train-test leakage when training
+        steering methods on FRQs and evaluating on MCQs, train rows that
+        match either are dropped. The test set is preserved in full.
+
+        ``n_train`` caps the train slice. Pass ``None`` to return every
+        non-leaking FRQ. ``seed`` shuffles the train candidates before
+        capping; pass ``seed=None`` to preserve dataset order. Test order is
+        left untouched.
         """
-        train = self.get_qa(
-            persona_id,
-            type=train_type,
-            item_type=train_item_type,
-            scope="individual",
-        )[:n_train]
-        test = self.get_qa(persona_id, scope="shared")
+        test = self.get_qa(persona_id, item_type="mcq", scope="shared")
+
+        leak_bank_ids = {q.bank_id for q in test if q.bank_id}
+        leak_qids = {qid for q in test for qid in q.related_frq_qids}
+
+        train = [
+            q
+            for q in self.get_qa(persona_id, item_type="frq", scope="individual")
+            if not (q.bank_id and q.bank_id in leak_bank_ids)
+            and q.qid not in leak_qids
+        ]
+        if seed is not None:
+            random.Random(seed).shuffle(train)
+        if n_train is not None:
+            train = train[:n_train]
         return train, test
 
 
@@ -185,10 +227,21 @@ class SynthPersonaDataset(PersonaDataset):
         from huggingface_hub import hf_hub_download
 
         # HF Hub caches locally under HF_HOME so repeat runs are instant.
+        bank_path = hf_hub_download(
+            hf_repo, "implicit_shared_mc_bank.json", repo_type="dataset"
+        )
+        with open(bank_path) as f:
+            bank = json.load(f)
+        related_map = {
+            item["bank_id"]: item.get("related_frq_qids", [])
+            for item in bank.get("items", [])
+            if item.get("bank_id")
+        }
         super().__init__(
             personas_path=hf_hub_download(
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
             ),
             qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
+            related_frq_qids_by_bank_id=related_map,
             sample_size=sample_size,
         )

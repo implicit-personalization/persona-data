@@ -18,7 +18,7 @@ system_prompt = format_prompt(persona, "biography")
 
 The resulting system prompt instructs the model to stay in character and not reveal it is an AI.
 
-`format_prompt` accepts raw profile text, a `PersonaData` plus one of the standard variants, or no persona for the shared baseline. It also accepts a `mode` argument:
+`format_prompt` accepts a `PersonaData` plus one of the standard variants, or raw profile text. It also accepts a `mode` argument:
 
 - `mode="roleplay"` for the plain persona prompt
 - `mode="conversational"` to add a natural chat instruction
@@ -36,20 +36,18 @@ for variant in ("templated", "biography"):
 
 ### Baseline Prompt
 
-The persona-less Assistant baseline is `format_prompt()` with no arguments:
+The persona-less Assistant baseline is just another persona in the dataset (id `"baseline_assistant"`, exported as `BASELINE_PERSONA_ID`). `dataset.baseline` returns it directly:
 
 ```python
-from persona_data.prompts import (
-    BASELINE_PERSONA_ID,
-    BASELINE_PERSONA_NAME,
-    format_prompt,
-)
+from persona_data.prompts import format_prompt
+from persona_data.synth_persona import SynthPersonaDataset
 
-system_prompt = format_prompt()
+dataset = SynthPersonaDataset()
+baseline = dataset.baseline
+system_prompt = format_prompt(baseline, "templated")
 ```
 
-Downstream packages can use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME`
-for artifact naming or UI labels.
+`BASELINE_PERSONA_NAME` is the display label (`"Assistant"`) for artifact naming and UI.
 
 For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
 
