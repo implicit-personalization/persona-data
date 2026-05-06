@@ -74,7 +74,14 @@ persona.templated_view    # short attribute-based system prompt
 persona.biography_view    # full biography text
 persona.statements        # list of Statement
 
-qa_pairs = dataset.get_qa(persona.id, type="implicit", item_type="mcq")
+qa_pairs_train = dataset.get_qa(persona.id, item_type="frq")
+qa_pairs_test = dataset.get_qa(persona.id, item_type="mcq", scope="shared")
+explicit_interview = dataset.get_qa(
+    persona.id,
+    type="explicit",
+    item_type="mcq",
+    source="interview",
+)
 ```
 
 ### PersonaGuess
@@ -106,7 +113,7 @@ full_prompt, response_start_idx = format_messages(messages, tokenizer)
 
 When iterating over variants in an experiment, pass `"templated"` or `"biography"` to `format_prompt(persona, variant)`. Calling `format_prompt()` yields the persona-less Assistant baseline prompt. Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.prompts` for the shared baseline identity in artifacts and UI labels.
 
-For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
+For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label. `QAPair.split_group_id` is an optional generic split key for rows that belong to one leakage group. `QAPair.related_qids` is an optional generic list for rows related to multiple source rows; for SynthPersona implicit shared MCQs, it contains source free-response qids.
 
 `format_messages` handles tokenizers that do not support the `"system"` role (for example Gemma 2) by merging system content into the first user message. Pass `add_generation_prompt=True` to render an inference-ready prompt (messages ending in a `user` turn); the returned `response_start_idx` then equals the prompt length, ready to slice `model.generate` output.
 

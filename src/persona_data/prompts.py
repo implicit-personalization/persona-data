@@ -15,8 +15,9 @@ Do not mention that you are an AI model.
 
 _CONVERSATIONAL_SUFFIX = "\n\nAnswer naturally and conversationally as this person."
 
-BASELINE_PERSONA_ID = "baseline"
+BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
+BASELINE_VARIANT = "baseline"
 
 _PERSONA_VIEWS = {"templated": "templated_view", "biography": "biography_view"}
 
@@ -31,7 +32,7 @@ def mc_answer_only_instruction(n_choices: int) -> str:
 
 def format_prompt(
     persona: PersonaData | str | None = None,
-    variant: Literal["baseline", "templated", "biography"] = BASELINE_PERSONA_ID,
+    variant: Literal["baseline", "templated", "biography"] = BASELINE_VARIANT,
     mode: Literal["roleplay", "conversational"] = "roleplay",
 ) -> str:
     """Build a standard persona system prompt.
@@ -49,7 +50,7 @@ def format_prompt(
 
     if isinstance(persona, str):
         profile_text = persona
-    elif variant == BASELINE_PERSONA_ID:
+    elif variant == BASELINE_VARIANT:
         profile_text = BASELINE_PERSONA_NAME
     elif variant not in _PERSONA_VIEWS:
         raise ValueError(f"Unsupported persona prompt variant: {variant!r}")

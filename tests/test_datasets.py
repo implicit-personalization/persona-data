@@ -50,7 +50,7 @@ def test_format_prompt_rejects_unknown_mode():
 def test_format_prompt_baseline_default():
     """Calling without args yields the persona-less Assistant baseline prompt."""
     prompt = format_prompt()
-    assert BASELINE_PERSONA_ID == "baseline"
+    assert BASELINE_PERSONA_ID == "baseline_assistant"
     assert BASELINE_PERSONA_NAME in prompt
 
 
@@ -146,6 +146,9 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "scope": "individual",
             "question": "Who is it?",
             "answer": "Ada",
+            "source": "seed_attribute",
+            "bank_id": "explicit_name",
+            "attribute_keys": ["first_name"],
         },
         {
             "id": "p1",
@@ -157,6 +160,8 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "answer": "math",
             "choices": ["math", "science"],
             "correct_choice_index": 0,
+            "family_id": "implicit_hint",
+            "axis": "curiosity",
         },
         {
             "id": "p1",
@@ -168,6 +173,10 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "answer": "math",
             "choices": ["math", "art"],
             "correct_choice_index": 0,
+            "source": "interview",
+            "bank_id": "explicit_interview_field",
+            "source_turn": 7,
+            "source_turns": [7],
         },
         {
             "id": "p1",
@@ -179,6 +188,11 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "answer": "yes",
             "choices": ["yes", "no"],
             "correct_choice_index": 0,
+            "bank_id": "implicit_shared",
+            "family_id": "implicit_shared",
+            "family_name": "Implicit Shared",
+            "domain": "identity",
+            "axis": "curiosity",
         },
         {
             "id": "p1",
@@ -189,7 +203,12 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
             "question": "Shared explicit?",
             "answer": "yes",
             "choices": ["yes", "no"],
+            "choice_labels": ["A", "B"],
             "correct_choice_index": 0,
+            "correct_choice_letter": "A",
+            "source": "statement",
+            "bank_id": "explicit_statement_yes",
+            "statement_category": "values",
         },
         {
             "id": "p2",
@@ -226,6 +245,41 @@ def test_persona_dataset_qa_filters_by_type_and_item_type(tmp_path: Path):
     assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1", "q3", "q5"]
     assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2", "q3", "q4", "q5"]
     assert [q.qid for q in ds.get_qa("p1", scope="shared")] == ["q4", "q5"]
+    assert [q.qid for q in ds.get_qa("p1", source="interview")] == ["q3"]
+    assert [q.qid for q in ds.get_qa("p1", bank_id="explicit_statement_yes")] == ["q5"]
+    assert [q.qid for q in ds.get_qa("p1", family_id="implicit_shared")] == ["q4"]
+
+
+def test_persona_dataset_exposes_current_public_metadata(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+
+    qa = ds.get_qa("p1", bank_id="explicit_statement_yes")[0]
+    assert qa.choice_labels == ["A", "B"]
+    assert qa.correct_choice_letter == "A"
+    assert qa.source == "statement"
+    assert qa.metadata["statement_category"] == "values"
+    assert qa.split_group_id == "explicit:explicit_statement_yes"
+
+    implicit = ds.get_qa("p1", family_id="implicit_shared")[0]
+    assert implicit.metadata["family_name"] == "Implicit Shared"
+    assert implicit.metadata["domain"] == "identity"
+    assert implicit.metadata["axis"] == "curiosity"
+    assert implicit.split_group_id is None
+    assert implicit.related_qids == []
+
+
+def test_persona_dataset_hydrates_related_qids_from_generic_bank_mapping(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+
+    ds = PersonaDataset(
+        personas_path,
+        qa_path,
+        related_qids_by_bank_id={"implicit_shared": ["p1-q10", "p2-q20"]},
+    )
+
+    implicit = ds.get_qa("p1", family_id="implicit_shared")[0]
+    assert implicit.related_qids == ["p1-q10", "p2-q20"]
 
 
 def test_persona_dataset_train_test_split_uses_individual_for_train(tmp_path: Path):

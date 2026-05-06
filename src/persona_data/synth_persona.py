@@ -1,22 +1,37 @@
 import json
 from collections import defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal
+
+QAType = Literal["explicit", "implicit"]
+QAItemType = Literal["mcq", "frq"]
+QAScope = Literal["individual", "shared"]
+QASource = Literal["seed_attribute", "interview", "statement"]
 
 
 @dataclass
 class QAPair:
     qid: str
-    type: Literal["explicit", "implicit"]
-    item_type: Literal["mcq", "frq"]
-    scope: Literal["individual", "shared"]
+    type: QAType
+    item_type: QAItemType
+    scope: QAScope
     question: str
     answer: str
     choices: list[str] = field(default_factory=list)
+    choice_labels: list[str] = field(default_factory=list)
     correct_choice_index: int | None = None
+    correct_choice_letter: str | None = None
+    source: QASource | str | None = None
+    bank_id: str | None = None
+    family_id: str | None = None
     evidence_sids: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    is_baseline: bool = False
+    split_group_id: str | None = None
+    related_qids: list[str] = field(default_factory=list)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
     def __repr__(self):
         return f"QAPair(qid={self.qid!r}, type={self.type!r}, item_type={self.item_type!r})"
@@ -50,6 +65,20 @@ class PersonaData:
         return f"PersonaData(id={self.id!r}, name={self.name!r})"
 
 
+def _load_related_qids_by_bank_id(bank_path: Path | str) -> dict[str, list[str]]:
+    """Load generic related-qid mappings from a shared QA bank file."""
+    with open(bank_path) as f:
+        payload = json.load(f)
+    related: dict[str, list[str]] = {}
+    for item in payload.get("items", []):
+        bank_id = item.get("bank_id")
+        if bank_id:
+            related[str(bank_id)] = item.get("related_qids") or item.get(
+                "related_frq_qids"
+            ) or []
+    return related
+
+
 class PersonaDataset:
     """Persona dataset loaded from local JSONL files."""
 
@@ -58,6 +87,7 @@ class PersonaDataset:
         personas_path: Path | str,
         qa_path: Path | str,
         *,
+        related_qids_by_bank_id: Mapping[str, list[str]] | None = None,
         sample_size: int | None = None,
     ) -> None:
         self.sample_size = sample_size
@@ -91,6 +121,8 @@ class PersonaDataset:
 
         loaded_ids = set(self._personas_by_id)
         self._qa: dict[str, list[QAPair]] = defaultdict(list)
+        related_qids_by_bank_id = related_qids_by_bank_id or {}
+
         with open(qa_path) as f:
             for line in f:
                 if not line.strip():
@@ -98,6 +130,40 @@ class PersonaDataset:
                 d = json.loads(line)
                 if d["id"] not in loaded_ids:
                     continue
+                related_qids = d.get("related_qids") or d.get("related_frq_qids") or []
+                bank_id = d.get("bank_id")
+                if bank_id in related_qids_by_bank_id:
+                    related_qids = list(related_qids_by_bank_id[str(bank_id)])
+                split_group_id = d.get("split_group_id")
+                if split_group_id is None and d.get("type") == "explicit" and d.get("bank_id"):
+                    split_group_id = f"explicit:{d['bank_id']}"
+                metadata = {
+                    key: value
+                    for key, value in d.items()
+                    if key
+                    not in {
+                        "id",
+                        "qid",
+                        "type",
+                        "item_type",
+                        "scope",
+                        "question",
+                        "answer",
+                        "choices",
+                        "choice_labels",
+                        "correct_choice_index",
+                        "correct_choice_letter",
+                        "source",
+                        "bank_id",
+                        "family_id",
+                        "evidence_sids",
+                        "tags",
+                        "is_baseline",
+                        "split_group_id",
+                        "related_qids",
+                        "related_frq_qids",
+                    }
+                }
                 self._qa[d["id"]].append(
                     QAPair(
                         qid=d["qid"],
@@ -107,9 +173,18 @@ class PersonaDataset:
                         question=d["question"],
                         answer=d["answer"],
                         choices=d.get("choices") or [],
+                        choice_labels=d.get("choice_labels") or [],
                         correct_choice_index=d.get("correct_choice_index"),
-                        evidence_sids=d.get("evidence_sids", []),
-                        tags=d.get("tags", []),
+                        correct_choice_letter=d.get("correct_choice_letter"),
+                        source=d.get("source"),
+                        bank_id=d.get("bank_id"),
+                        family_id=d.get("family_id"),
+                        evidence_sids=d.get("evidence_sids") or [],
+                        tags=d.get("tags") or [],
+                        is_baseline=d.get("is_baseline", False),
+                        split_group_id=split_group_id,
+                        related_qids=related_qids,
+                        metadata=metadata,
                     )
                 )
 
@@ -131,11 +206,14 @@ class PersonaDataset:
     def get_qa(
         self,
         persona_id: str,
-        type: Literal["explicit", "implicit"] | None = None,
-        item_type: Literal["mcq", "frq"] | None = None,
-        scope: Literal["individual", "shared"] | None = None,
+        type: QAType | None = None,
+        item_type: QAItemType | None = None,
+        scope: QAScope | None = None,
+        source: QASource | str | None = None,
+        bank_id: str | None = None,
+        family_id: str | None = None,
     ) -> list[QAPair]:
-        """Return QA pairs for a persona, optionally filtered by type / item_type."""
+        """Return QA pairs for one persona, optionally filtered by schema fields."""
         pairs = self._qa.get(persona_id, [])
         if type is not None:
             pairs = [p for p in pairs if p.type == type]
@@ -143,6 +221,12 @@ class PersonaDataset:
             pairs = [p for p in pairs if p.item_type == item_type]
         if scope is not None:
             pairs = [p for p in pairs if p.scope == scope]
+        if source is not None:
+            pairs = [p for p in pairs if p.source == source]
+        if bank_id is not None:
+            pairs = [p for p in pairs if p.bank_id == bank_id]
+        if family_id is not None:
+            pairs = [p for p in pairs if p.family_id == family_id]
         return pairs
 
     def train_test_split(
@@ -150,18 +234,15 @@ class PersonaDataset:
         persona_id: str,
         *,
         n_train: int = 25,
-        train_type: Literal["explicit", "implicit"] | None = "explicit",
-        train_item_type: Literal["mcq", "frq"] | None = "mcq",
+        train_type: QAType | None = "explicit",
+        train_item_type: QAItemType | None = "mcq",
     ) -> tuple[list[QAPair], list[QAPair]]:
         """Return ``(train, test)`` QA splits for one persona.
 
-        Train: ``scope='individual'`` QAs — persona-specific items used to
-        derive a persona representation (Doc-to-LoRA conditioning, steering
-        vector, SAE features, …). Capped at ``n_train`` and by default
-        narrowed to explicit MCQs.
-        Test: ``scope='shared'`` QAs — the questions every persona answers,
-        kept as a held-out evaluation set with whatever mix of
-        explicit/implicit is present in the data.
+        Train: individual explicit multiple-choice QAs by default. This keeps
+        the historical helper behavior stable. Use `get_qa(..., item_type="frq")`
+        directly when building FRQ-trained steering vectors.
+        Test: shared multiple-choice QAs by default.
         """
         train = self.get_qa(
             persona_id,
@@ -169,7 +250,7 @@ class PersonaDataset:
             item_type=train_item_type,
             scope="individual",
         )[:n_train]
-        test = self.get_qa(persona_id, scope="shared")
+        test = self.get_qa(persona_id, item_type="mcq", scope="shared")
         return train, test
 
 
@@ -185,10 +266,14 @@ class SynthPersonaDataset(PersonaDataset):
         from huggingface_hub import hf_hub_download
 
         # HF Hub caches locally under HF_HOME so repeat runs are instant.
+        implicit_bank_path = hf_hub_download(
+            hf_repo, "implicit_shared_mc_bank.json", repo_type="dataset"
+        )
         super().__init__(
             personas_path=hf_hub_download(
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
             ),
             qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
+            related_qids_by_bank_id=_load_related_qids_by_bank_id(implicit_bank_path),
             sample_size=sample_size,
         )
