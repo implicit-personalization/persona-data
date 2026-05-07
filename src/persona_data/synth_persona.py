@@ -175,7 +175,7 @@ class PersonaDataset:
         self,
         persona_id: str,
         *,
-        n_train: int | None = 50,
+        n_train: int | None = None,
         seed: int | None = 0,
     ) -> tuple[list[QAPair], list[QAPair]]:
         """Return leakage-filtered ``(train, test)`` QA splits for one persona.

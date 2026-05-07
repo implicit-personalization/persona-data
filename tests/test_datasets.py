@@ -314,12 +314,14 @@ def test_persona_dataset_train_test_split_seed_shuffles_reproducibly(tmp_path: P
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     ds = PersonaDataset(personas_path, qa_path)
 
+    default_no_cap, _ = ds.train_test_split("p1")
     a, _ = ds.train_test_split("p1", n_train=None, seed=0)
     default_seed, _ = ds.train_test_split("p1", n_train=None)
     b, _ = ds.train_test_split("p1", n_train=None, seed=0)
     c, _ = ds.train_test_split("p1", n_train=None, seed=1)
     no_seed, _ = ds.train_test_split("p1", n_train=None, seed=None)
 
+    assert [q.qid for q in default_no_cap] == [q.qid for q in default_seed]
     qids_a = [q.qid for q in a]
     qids_no_seed = [q.qid for q in no_seed]
     assert qids_a == [q.qid for q in default_seed]

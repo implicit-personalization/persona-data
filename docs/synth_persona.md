@@ -79,9 +79,9 @@ loaded_persona = dataset.get_persona("p1")
 
 ### Train/test split
 
-`dataset.train_test_split(persona_id, n_train=50, seed=0)` returns `(train, test)` for one persona:
+`dataset.train_test_split(persona_id, n_train=None, seed=0)` returns `(train, test)` for one persona:
 
-- **train**: individual free-response questions (both explicit and implicit), capped at `n_train`. Pass `n_train=None` for no cap.
+- **train**: individual free-response questions (both explicit and implicit). Pass `n_train=50` or another integer to cap the train slice, or `n_train=None` for no cap.
 - **test**: shared multiple-choice questions (both explicit and implicit), preserved in full. The shared bank is the same item set for every persona, so per-persona test scores are directly comparable.
 - **seed**: optional `int` that shuffles the train candidates before capping (reproducible). Test order is left untouched.
 

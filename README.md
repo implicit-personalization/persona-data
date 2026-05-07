@@ -77,7 +77,10 @@ persona.statements        # list of Statement
 qa_pairs = dataset.get_qa(persona.id, type="implicit", item_type="mcq")
 
 # Leakage-aware split: train on individual FRQs, test on shared MCQs.
-train_qa, test_qa = dataset.train_test_split(persona.id, n_train=50)
+train_qa, test_qa = dataset.train_test_split(persona.id)
+
+# Optional cap if you want a smaller train slice:
+# train_qa, test_qa = dataset.train_test_split(persona.id, n_train=50)
 ```
 
 ### PersonaGuess
