@@ -199,14 +199,13 @@ class PersonaDataset:
         """
         test = self.get_qa(persona_id, item_type="mcq", scope="shared")
 
-        leak_bank_ids = {q.bank_id for q in test if q.bank_id}
-        leak_qids = {qid for q in test for qid in q.related_frq_qids}
+        test_bank_ids = {q.bank_id for q in test if q.bank_id}
+        test_qids = {qid for q in test for qid in q.related_frq_qids}
 
         train = [
             q
             for q in self.get_qa(persona_id, item_type="frq", scope="individual")
-            if not (q.bank_id and q.bank_id in leak_bank_ids)
-            and q.qid not in leak_qids
+            if not (q.bank_id and q.bank_id in test_bank_ids) and q.qid not in test_qids
         ]
         if seed is not None:
             random.Random(seed).shuffle(train)

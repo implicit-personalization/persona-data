@@ -1,11 +1,6 @@
 from typing import Literal
 
-from persona_data.synth_persona import (
-    BASELINE_PERSONA_ID,
-    BASELINE_PERSONA_NAME,
-    PersonaData,
-    QAPair,
-)
+from persona_data.synth_persona import PersonaData, QAPair
 
 _LETTERS = "ABCDEFG"
 
