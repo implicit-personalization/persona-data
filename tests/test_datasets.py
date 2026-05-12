@@ -339,6 +339,7 @@ def test_persona_dataset_attribute_schema_drives_names_and_ordinal_encoding(
         "kind": "nominal",
         "analysis_recommendation": "inspect",
     }
+    assert ds.attribute_values("state", persona_ids, encode=True) == [None, None]
     assert ds.attribute_values("political_views", persona_ids) == [
         "Liberal",
         "Moderate, middle of the road",

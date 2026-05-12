@@ -110,6 +110,7 @@ def _read_json(path: Path | str | None) -> dict:
 
 
 def _encode_attribute(value: Any, field_info: dict) -> float | None:
+    """Convert analysis-friendly attributes to numeric values when possible."""
     if isinstance(value, bool):
         return float(value)
     if isinstance(value, int | float):

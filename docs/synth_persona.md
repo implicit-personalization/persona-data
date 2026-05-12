@@ -97,8 +97,10 @@ all_states = dataset.attribute_values("state")
 
 `dataset.attribute_names` lists non-identifier attributes. `dataset.attribute_info(name)`
 returns the raw schema entry when the Hugging Face schema is available. Ordinal
-attributes with schema `ordered_values` encode to `0.0, 1.0, ...`; numeric
-attributes encode to floats; nominal attributes stay as their raw labels.
+attributes with schema `ordered_values` encode to `0.0, 1.0, ...`; binary
+`No` / `Yes` attributes encode to `0.0` / `1.0`; numeric and boolean
+attributes encode to floats. Nominal attributes and other non-ordered labels
+encode to `None`, so leave `encode=False` when you want raw labels.
 
 ## Queries
 
