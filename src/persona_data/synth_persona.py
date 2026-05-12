@@ -3,10 +3,11 @@ import random
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator, Literal
+from typing import Any, Iterator, Literal
 
 BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
+_DEFAULT_ATTRIBUTE_EXCLUDE = {"first_name", "last_name"}
 
 
 @dataclass
@@ -101,6 +102,29 @@ def _read_jsonl(path: Path | str) -> Iterator[dict]:
                 yield json.loads(line)
 
 
+def _read_json(path: Path | str | None) -> dict:
+    if path is None:
+        return {}
+    with open(path) as f:
+        return json.load(f)
+
+
+def _encode_attribute(value: Any, field_info: dict) -> float | None:
+    if isinstance(value, bool):
+        return float(value)
+    if isinstance(value, int | float):
+        return float(value)
+    ordered = field_info.get("ordered_values")
+    if isinstance(ordered, list):
+        try:
+            return float(ordered.index(value))
+        except ValueError:
+            return None
+    if field_info.get("kind") == "binary" and value in {"No", "Yes"}:
+        return 1.0 if value == "Yes" else 0.0
+    return None
+
+
 class PersonaDataset:
     """Persona dataset loaded from local JSONL files.
 
@@ -115,8 +139,11 @@ class PersonaDataset:
         qa_path: Path | str,
         *,
         related_frq_qids_by_bank_id: dict[str, list[str]] | None = None,
+        attribute_schema_path: Path | str | None = None,
         sample_size: int | None = None,
     ) -> None:
+        self.attribute_schema = _read_json(attribute_schema_path)
+        self._attribute_fields = self.attribute_schema.get("persona_fields", {})
         self._personas: list[PersonaData] = []
         self._personas_by_id: dict[str, PersonaData] = {}
 
@@ -126,6 +153,7 @@ class PersonaDataset:
             persona = _parse_persona(d)
             self._personas.append(persona)
             self._personas_by_id[persona.id] = persona
+        self._persona_ids = tuple(persona.id for persona in self._personas)
 
         loaded_ids = set(self._personas_by_id)
         related_map = related_frq_qids_by_bank_id or {}
@@ -133,6 +161,22 @@ class PersonaDataset:
         for d in _read_jsonl(qa_path):
             if d["id"] in loaded_ids:
                 self._qa[d["id"]].append(_parse_qa(d, related_map))
+
+        if self._attribute_fields:
+            self._attribute_names = tuple(
+                name
+                for name, info in self._attribute_fields.items()
+                if info.get("analysis_recommendation") != "drop"
+                and not info.get("identifier")
+            )
+        else:
+            names = {
+                name
+                for persona in self._personas
+                for name in persona.persona
+                if name not in _DEFAULT_ATTRIBUTE_EXCLUDE
+            }
+            self._attribute_names = tuple(sorted(names))
 
     def __repr__(self) -> str:
         return f"{type(self).__name__}(n_personas={len(self._personas)})"
@@ -146,6 +190,16 @@ class PersonaDataset:
     def __getitem__(self, idx: int) -> PersonaData:
         return self._personas[idx]
 
+    @property
+    def persona_ids(self) -> tuple[str, ...]:
+        """Loaded persona ids in dataset order."""
+        return self._persona_ids
+
+    @property
+    def attribute_names(self) -> tuple[str, ...]:
+        """Non-identifier attribute names."""
+        return self._attribute_names
+
     def get_persona(self, persona_id: str) -> PersonaData | None:
         return self._personas_by_id.get(persona_id)
 
@@ -153,6 +207,28 @@ class PersonaDataset:
     def baseline(self) -> PersonaData | None:
         """Persona-less Assistant baseline if loaded, else ``None``."""
         return self._personas_by_id.get(BASELINE_PERSONA_ID)
+
+    def attribute_info(self, name: str) -> dict:
+        """Return schema metadata for an attribute, if available."""
+        return self._attribute_fields.get(name, {})
+
+    def attribute_values(
+        self,
+        name: str,
+        persona_ids: list[str] | None = None,
+        *,
+        encode: bool = False,
+        missing: Any = None,
+    ) -> list[Any]:
+        """Return attribute values aligned to ``persona_ids`` or dataset order."""
+        ids = persona_ids if persona_ids is not None else self._persona_ids
+        field_info = self.attribute_info(name)
+        values: list[Any] = []
+        for persona_id in ids:
+            persona = self._personas_by_id[persona_id]
+            value = persona.persona.get(name, missing)
+            values.append(_encode_attribute(value, field_info) if encode else value)
+        return values
 
     def get_qa(
         self,
@@ -224,6 +300,7 @@ class SynthPersonaDataset(PersonaDataset):
         sample_size: int | None = None,
     ) -> None:
         from huggingface_hub import hf_hub_download
+        from huggingface_hub.utils import EntryNotFoundError, LocalEntryNotFoundError
 
         # HF Hub caches locally under HF_HOME so repeat runs are instant.
         bank_path = hf_hub_download(
@@ -236,11 +313,19 @@ class SynthPersonaDataset(PersonaDataset):
             for item in bank.get("items", [])
             if item.get("bank_id")
         }
+        try:
+            attribute_schema_path = hf_hub_download(
+                hf_repo, "attribute_schema.json", repo_type="dataset"
+            )
+        except (EntryNotFoundError, LocalEntryNotFoundError):
+            attribute_schema_path = None
+
         super().__init__(
             personas_path=hf_hub_download(
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
             ),
             qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
             related_frq_qids_by_bank_id=related_map,
+            attribute_schema_path=attribute_schema_path,
             sample_size=sample_size,
         )

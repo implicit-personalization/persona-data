@@ -16,6 +16,7 @@ The default dataset source is `implicit-personalization/synth-persona`. The load
 - `dataset_personas.jsonl`
 - `dataset_qa.jsonl`
 - `implicit_shared_mc_bank.json` (used to hydrate `QAPair.related_frq_qids` on implicit shared MCQs)
+- `attribute_schema.json`, when present (used to expose clean attribute names and ordinal encodings)
 
 `sample_size` keeps the leading personas and filters QA rows to the loaded persona IDs. The persona-less Assistant baseline is an ordinary persona row (`id="baseline_assistant"`, exported as `BASELINE_PERSONA_ID`).
 
@@ -63,6 +64,41 @@ for persona in dataset:
 - `statements`
 
 It also exposes `name` as a derived property.
+
+```python
+persona = dataset[0]
+
+persona.name              # "Ethan Robinson"
+persona.templated_view    # short attribute-based system prompt
+persona.biography_view    # full biography text
+persona.persona["state"]  # raw structured attributes
+persona.statements        # list of Statement
+```
+
+`persona` is the raw structured attribute dictionary. Use the dataset helpers
+when you need values aligned to a persona id list:
+
+```python
+from persona_data.synth_persona import BASELINE_PERSONA_ID
+
+persona_ids = [p.id for p in dataset if p.id != BASELINE_PERSONA_ID]
+
+# Categorical labels aligned to persona_ids.
+states = dataset.attribute_values("state", persona_ids)
+
+# Numeric values for scalar coloring or analysis.
+ages = dataset.attribute_values("age", persona_ids, encode=True)
+politics = dataset.attribute_values("political_views", persona_ids, encode=True)
+
+# Convenience for all loaded personas in dataset order.
+all_states = dataset.attribute_values("state")
+
+```
+
+`dataset.attribute_names` lists non-identifier attributes. `dataset.attribute_info(name)`
+returns the raw schema entry when the Hugging Face schema is available. Ordinal
+attributes with schema `ordered_values` encode to `0.0, 1.0, ...`; numeric
+attributes encode to floats; nominal attributes stay as their raw labels.
 
 ## Queries
 

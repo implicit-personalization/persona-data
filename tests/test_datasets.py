@@ -21,13 +21,18 @@ from persona_data.nemotron_personas import (
 )
 from persona_data.persona_guess import PersonaGuessDataset
 from persona_data.prompts import (
-    BASELINE_PERSONA_ID,
-    BASELINE_PERSONA_NAME,
     format_mc_question,
     format_prompt,
     mc_answer_only_instruction,
 )
-from persona_data.synth_persona import PersonaData, PersonaDataset, QAPair
+from persona_data.synth_persona import (
+    BASELINE_PERSONA_ID,
+    BASELINE_PERSONA_NAME,
+    PersonaData,
+    PersonaDataset,
+    QAPair,
+    SynthPersonaDataset,
+)
 
 # --------------------------------------------------------------------------- #
 # environment / prompts                                                       #
@@ -126,13 +131,25 @@ def _write_persona_fixture(tmp: Path) -> tuple[Path, Path]:
     personas = [
         {
             "id": "p1",
-            "persona": {"first_name": "Ada", "last_name": "Lovelace"},
+            "persona": {
+                "first_name": "Ada",
+                "last_name": "Lovelace",
+                "age": 36,
+                "state": "CA",
+                "political_views": "Liberal",
+            },
             "templated_view": "Ada Lovelace",
             "biography_view": "Bio one",
         },
         {
             "id": "p2",
-            "persona": {"first_name": "Grace", "last_name": "Hopper"},
+            "persona": {
+                "first_name": "Grace",
+                "last_name": "Hopper",
+                "age": 45,
+                "state": "NY",
+                "political_views": "Moderate, middle of the road",
+            },
             "templated_view": "Grace Hopper",
             "biography_view": "Bio two",
         },
@@ -250,11 +267,114 @@ def test_persona_dataset_loads_personas_and_qa(tmp_path: Path):
 
     assert len(ds) == 3
     assert [p.id for p in ds] == ["p1", "p2", BASELINE_PERSONA_ID]
+    assert ds.persona_ids == ("p1", "p2", BASELINE_PERSONA_ID)
     assert ds[0].name == "Ada Lovelace"
     assert ds.get_persona("p2").name == "Grace Hopper"
     assert ds.baseline.id == BASELINE_PERSONA_ID
     assert ds.get_persona("missing") is None
     assert ds.get_persona(BASELINE_PERSONA_ID).templated_view == BASELINE_PERSONA_NAME
+    assert ds.attribute_names == ("age", "political_views", "state")
+
+
+def test_persona_dataset_attribute_helpers_without_schema(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+    persona_ids = ["p2", "p1"]
+
+    assert ds.attribute_values("state") == ["CA", "NY", None]
+    assert ds.attribute_values("state", persona_ids) == ["NY", "CA"]
+    assert ds.attribute_values("age", persona_ids, encode=True) == [45.0, 36.0]
+    assert ds.attribute_info("age") == {}
+    assert ds.attribute_values("missing", persona_ids, missing="unknown") == [
+        "unknown",
+        "unknown",
+    ]
+    with pytest.raises(KeyError):
+        ds.attribute_values("state", ["missing"])
+
+
+def test_persona_dataset_attribute_schema_drives_names_and_ordinal_encoding(
+    tmp_path: Path,
+):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    schema_path = tmp_path / "attribute_schema.json"
+    schema_path.write_text(
+        json.dumps(
+            {
+                "persona_fields": {
+                    "first_name": {"identifier": True},
+                    "last_name": {"identifier": True},
+                    "age": {"kind": "numeric", "analysis_recommendation": "keep"},
+                    "born_in_us": {
+                        "kind": "binary",
+                        "analysis_recommendation": "keep",
+                    },
+                    "political_views": {
+                        "kind": "ordinal",
+                        "analysis_recommendation": "keep",
+                        "ordered_values": [
+                            "Extremely liberal",
+                            "Liberal",
+                            "Moderate, middle of the road",
+                            "Conservative",
+                        ],
+                    },
+                    "state": {
+                        "kind": "nominal",
+                        "analysis_recommendation": "inspect",
+                    },
+                    "street_address": {"analysis_recommendation": "drop"},
+                }
+            }
+        )
+    )
+
+    ds = PersonaDataset(personas_path, qa_path, attribute_schema_path=schema_path)
+    persona_ids = ["p1", "p2"]
+
+    ds.get_persona("p1").persona["born_in_us"] = "Yes"
+
+    assert ds.attribute_names == ("age", "born_in_us", "political_views", "state")
+    assert ds.attribute_info("state") == {
+        "kind": "nominal",
+        "analysis_recommendation": "inspect",
+    }
+    assert ds.attribute_values("political_views", persona_ids) == [
+        "Liberal",
+        "Moderate, middle of the road",
+    ]
+    assert ds.attribute_values("political_views", persona_ids, encode=True) == [
+        1.0,
+        2.0,
+    ]
+    assert ds.attribute_values("born_in_us", ["p1"], encode=True) == [1.0]
+
+
+def test_synth_persona_dataset_tolerates_missing_attribute_schema(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    bank_path = tmp_path / "implicit_shared_mc_bank.json"
+    bank_path.write_text(json.dumps({"items": []}))
+
+    def fake_hf_hub_download(hf_repo: str, filename: str, repo_type: str) -> str:
+        assert hf_repo == "test/repo"
+        assert repo_type == "dataset"
+        if filename == "dataset_personas.jsonl":
+            return str(personas_path)
+        if filename == "dataset_qa.jsonl":
+            return str(qa_path)
+        if filename == "implicit_shared_mc_bank.json":
+            return str(bank_path)
+        if filename == "attribute_schema.json":
+            from huggingface_hub.utils import LocalEntryNotFoundError
+
+            raise LocalEntryNotFoundError("missing attribute_schema.json")
+        raise AssertionError(f"Unexpected download: {filename}")
+
+    with patch("huggingface_hub.hf_hub_download", side_effect=fake_hf_hub_download):
+        ds = SynthPersonaDataset(hf_repo="test/repo")
+
+    assert ds.attribute_names == ("age", "political_views", "state")
+    assert ds.attribute_schema == {}
 
 
 def test_persona_dataset_baseline_is_a_normal_sampled_persona(tmp_path: Path):
@@ -577,7 +697,7 @@ def test_nemotron_name_fallback_uses_uuid_when_no_match(nemotron_shards):
     assert persona_p4 is not None
     assert persona_p4.persona["first_name"] == "p4"
     assert persona_p4.persona["last_name"] == ""
-    assert persona_p4.name == "p4 "
+    assert persona_p4.name == "p4"
 
 
 def test_nemotron_usa_loads_requested_sample(nemotron_usa_shards):
@@ -621,7 +741,7 @@ def test_nemotron_usa_name_fallback_uses_uuid_when_no_match(nemotron_usa_shards)
     assert persona_u4 is not None
     assert persona_u4.persona["first_name"] == "u4"
     assert persona_u4.persona["last_name"] == ""
-    assert persona_u4.name == "u4 "
+    assert persona_u4.name == "u4"
 
 
 @pytest.mark.parametrize(

@@ -70,9 +70,6 @@ dataset = SynthPersonaDataset()
 
 persona = dataset[0]
 persona.name              # "Ethan Robinson"
-persona.templated_view    # short attribute-based system prompt
-persona.biography_view    # full biography text
-persona.statements        # list of Statement
 
 qa_pairs = dataset.get_qa(persona.id, type="implicit", item_type="mcq")
 
@@ -118,7 +115,7 @@ baseline = dataset.baseline  # PersonaData | None
 system_prompt = format_prompt(baseline, "templated")
 ```
 
-Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` (both in `persona_data.prompts`) for artifact naming and UI labels.
+Use `BASELINE_PERSONA_ID` and `BASELINE_PERSONA_NAME` from `persona_data.synth_persona` for artifact naming and UI labels.
 
 For multiple-choice prompts, use `format_mc_question(qa)` to render the question, choices, and trailing answer-only instruction. Use `mc_answer_only_instruction(n_choices)` if you need just the instruction text, and `mc_correct_letter(qa)` to get the gold label.
 
