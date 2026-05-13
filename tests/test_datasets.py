@@ -350,15 +350,21 @@ def test_persona_dataset_attribute_schema_drives_names_and_ordinal_encoding(
     ]
     assert ds.attribute_values("born_in_us", ["p1"], encode=True) == [1.0]
 
+    ds.get_persona("p1").persona["political_views"] = "Unknown"
+    with pytest.raises(ValueError, match="Unknown ordinal value"):
+        ds.attribute_values("political_views", ["p1"], encode=True)
+
 
 def test_synth_persona_dataset_tolerates_missing_attribute_schema(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     bank_path = tmp_path / "implicit_shared_mc_bank.json"
     bank_path.write_text(json.dumps({"items": []}))
+    requested_files: list[str] = []
 
     def fake_hf_hub_download(hf_repo: str, filename: str, repo_type: str) -> str:
         assert hf_repo == "test/repo"
         assert repo_type == "dataset"
+        requested_files.append(filename)
         if filename == "dataset_personas.jsonl":
             return str(personas_path)
         if filename == "dataset_qa.jsonl":
@@ -373,9 +379,10 @@ def test_synth_persona_dataset_tolerates_missing_attribute_schema(tmp_path: Path
 
     with patch("huggingface_hub.hf_hub_download", side_effect=fake_hf_hub_download):
         ds = SynthPersonaDataset(hf_repo="test/repo")
+        assert "attribute_schema.json" not in requested_files
+        assert ds.attribute_names == ("age", "political_views", "state")
+        assert ds.attribute_schema == {}
 
-    assert ds.attribute_names == ("age", "political_views", "state")
-    assert ds.attribute_schema == {}
 
 
 def test_persona_dataset_baseline_is_a_normal_sampled_persona(tmp_path: Path):
