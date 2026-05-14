@@ -136,11 +136,8 @@ def _encode_attribute(
 
 
 class PersonaDataset:
-    """Persona dataset loaded from local JSONL files.
-
-    ``sample_size`` keeps the leading N personas from the JSONL file. The
-    persona-less Assistant baseline is represented as an ordinary persona row
-    with id ``BASELINE_PERSONA_ID``.
+    """Persona dataset loaded from local JSONL files. The persona-less
+    Assistant baseline is an ordinary row with id ``BASELINE_PERSONA_ID``.
     """
 
     def __init__(
@@ -207,31 +204,31 @@ class PersonaDataset:
     @property
     def attribute_names(self) -> tuple[str, ...]:
         """Non-identifier attribute names."""
-        if self._attribute_schema_loader is not None or self._attribute_schema_path is not None:
-            self._load_attribute_schema()
+        self._load_attribute_schema()
         if self._attribute_fields:
             return self._schema_attribute_names()
         return self._inferred_attribute_names
 
     @property
     def attribute_schema(self) -> dict:
-        """Persona attribute schema, loaded lazily when backed by a remote helper."""
-        if self._attribute_schema_loader is not None or self._attribute_schema_path is not None:
-            return self._load_attribute_schema()
-        return {}
+        """Persona attribute schema, loaded lazily when configured."""
+        return self._load_attribute_schema()
 
     def _load_attribute_schema(self) -> dict:
-        if self._attribute_schema is None:
-            if self._attribute_schema_loader is not None:
-                self._attribute_schema = self._attribute_schema_loader()
-            else:
-                self._attribute_schema = _read_json(self._attribute_schema_path)
-            self._attribute_fields = self._attribute_schema.get("persona_fields", {})
-            self._attribute_ordinal_maps = {
-                name: ordinal_map
-                for name, info in self._attribute_fields.items()
-                if (ordinal_map := _ordinal_value_map(info))
-            }
+        if self._attribute_schema is not None:
+            return self._attribute_schema
+        if self._attribute_schema_loader is not None:
+            self._attribute_schema = self._attribute_schema_loader()
+        elif self._attribute_schema_path is not None:
+            self._attribute_schema = _read_json(self._attribute_schema_path)
+        else:
+            self._attribute_schema = {}
+        self._attribute_fields = self._attribute_schema.get("persona_fields", {})
+        self._attribute_ordinal_maps = {
+            name: ordinal_map
+            for name, info in self._attribute_fields.items()
+            if (ordinal_map := _ordinal_value_map(info))
+        }
         return self._attribute_schema
 
     def _schema_attribute_names(self) -> tuple[str, ...]:
@@ -252,8 +249,7 @@ class PersonaDataset:
 
     def attribute_info(self, name: str) -> dict:
         """Return schema metadata for an attribute, if available."""
-        if self._attribute_schema_loader is not None or self._attribute_schema_path is not None:
-            self._load_attribute_schema()
+        self._load_attribute_schema()
         return self._attribute_fields.get(name, {})
 
     def attribute_values(

@@ -1,14 +1,12 @@
 # Prompt formatting
 
-`persona_data.prompts` provides helpers for two evaluation patterns: chatting with a persona in character, and asking a persona to answer a multiple-choice question.
+`persona_data.prompts` covers two evaluation patterns: chatting with a persona in character, and asking a persona to answer a multiple-choice question.
 
-## Roleplay (chat with a specific persona)
-
-`format_prompt` is the main entry point for persona prompts:
+## Roleplay system prompts
 
 ```python
-from persona_data.synth_persona import SynthPersonaDataset
 from persona_data.prompts import format_prompt
+from persona_data.synth_persona import SynthPersonaDataset
 
 dataset = SynthPersonaDataset()
 persona = dataset[0]
@@ -16,95 +14,34 @@ persona = dataset[0]
 system_prompt = format_prompt(persona, "biography")
 ```
 
-The resulting system prompt instructs the model to stay in character and not reveal it is an AI.
+`format_prompt(persona, variant, mode)`:
 
-`format_prompt` accepts a `PersonaData` plus one of the standard variants, or raw profile text. It also accepts a `mode` argument:
+- `persona` is a `PersonaData` or raw profile text.
+- `variant` is `"templated"` (short attribute list) or `"biography"` (full prose). Ignored when `persona` is a string.
+- `mode="roleplay"` (default) returns the plain prompt; `mode="conversational"` appends a natural-chat instruction.
 
-- `mode="roleplay"` for the plain persona prompt
-- `mode="conversational"` to add a natural chat instruction
-
-### Variant-Aware System Prompts
-
-To iterate over persona variants, keep the experiment's choices local and pass each variant to `format_prompt`:
-
-```python
-from persona_data.prompts import format_prompt
-
-for variant in ("templated", "biography"):
-    system_prompt = format_prompt(persona, variant)
-```
-
-### Baseline Prompt
-
-The persona-less Assistant baseline is just another persona in the dataset (id `"baseline_assistant"`, exported as `BASELINE_PERSONA_ID`). `dataset.baseline` returns it directly:
-
-```python
-from persona_data.prompts import format_prompt
-from persona_data.synth_persona import SynthPersonaDataset
-
-dataset = SynthPersonaDataset()
-baseline = dataset.baseline
-system_prompt = format_prompt(baseline, "templated")
-```
-
-`BASELINE_PERSONA_NAME` is the display label (`"Assistant"`) for artifact naming and UI.
-
-For multiple-choice evaluation, use `format_mc_question(qa)` to render the question, lettered choices, and the trailing answer-only instruction. Use `mc_correct_letter(qa)` to get the ground-truth label.
-
-`format_mc_question()` expects a `QAPair` with `choices` and `correct_choice_index` populated. `mc_answer_only_instruction(n_choices)` supports 1 to 7 choices.
-
-### Tokenizing for a local model
-
-`format_messages` applies the tokenizer's chat template and returns the full prompt string plus the token index where the assistant response begins. It supports two modes via `add_generation_prompt`:
-
-```python
-from persona_data.prompts import format_messages
-
-# Extraction / training: messages end with the assistant turn to score.
-# response_start_idx points at the first token of that last assistant message.
-full_prompt, response_start_idx = format_messages(messages, tokenizer)
-
-# Inference: messages end with a user turn. The generation-prompt prefix
-# (e.g. <start_of_turn>model) is appended; response_start_idx equals the
-# prompt length, so model output can be sliced with sequences[:, response_start_idx:].
-full_prompt, response_start_idx = format_messages(
-    messages, tokenizer, add_generation_prompt=True
-)
-```
-
-Tokenizers that do not support the `"system"` role (e.g. Gemma 2) are handled automatically — the system content is merged into the first user message via the public `normalize_messages` helper. `supports_system_role(tokenizer)` is exposed for callers that need to branch on this.
-
-### Persona views
+The persona-less Assistant baseline lives in the dataset as `BASELINE_PERSONA_ID` (`"baseline_assistant"`). Retrieve it via `dataset.baseline`, then pass it to `format_prompt` like any other persona. `BASELINE_PERSONA_NAME` (`"Assistant"`) is the display label for artifact naming.
 
 | View | When to use |
 |---|---|
 | `persona.biography_view` | Rich prose biography; best for open-ended chat |
-| `persona.templated_view` | Short attribute list; faster, lower token cost |
-| `persona.statements_view` | Bullet-point claims; useful for fact-checking tasks |
+| `persona.templated_view` | Short attribute list; lower token cost |
+| `persona.statements_view` | Bullet-point claims; useful for fact-checking |
 
----
-
-## Multiple-choice evaluation
-
-Use `format_mc_question` to format a `QAPair` into a lettered multiple-choice prompt. Use `mc_correct_letter` to get the ground-truth label.
+## Multiple-choice prompts
 
 ```python
-from persona_data.synth_persona import SynthPersonaDataset
 from persona_data.prompts import format_mc_question, mc_correct_letter
 
-dataset = SynthPersonaDataset()
-persona = dataset[0]
-
-# Retrieve a QA pair with choices populated
 qa = next(qa for qa in dataset.get_qa(persona.id) if qa.choices)
 
-question_prompt = format_mc_question(qa)
-correct         = mc_correct_letter(qa)
+question_prompt = format_mc_question(qa)  # body + lettered choices + answer-only instruction
+correct         = mc_correct_letter(qa)   # ground-truth label
 ```
 
-`mc_answer_only_instruction(n_choices)` returns just the trailing instruction if you need it separately.
+`mc_answer_only_instruction(n_choices)` returns just the trailing instruction (supports 1–7 choices).
 
-`format_mc_question` renders the question body, lettered choices (A, B, C, …), and appends a trailing instruction telling the model to reply with only the choice label:
+Rendered output:
 
 ```
 What is Ethan's primary occupation?
@@ -114,28 +51,32 @@ B. Teacher
 C. Nurse
 D. Accountant
 
-Answer only with the correct choice label (A, B, C).
+Answer only with the correct choice label (A, B, C, D).
 ```
 
-### Combining roleplay + multiple-choice
+## Tokenizing for a local model
 
-To evaluate whether a model answers questions correctly when embodying a persona, combine both helpers:
+`format_messages(messages, tokenizer, add_generation_prompt=False)` applies the tokenizer's chat template and returns `(full_prompt, response_start_idx)`.
+
+- `add_generation_prompt=False` (extraction / training): `messages` ends with the assistant turn to score; the index points at its first token.
+- `add_generation_prompt=True` (inference): the generation-prompt prefix is appended; the index equals the prompt length, so slice generations with `sequences[:, response_start_idx:]`.
+
+Tokenizers without a `"system"` role (e.g. Gemma 2) are handled automatically — system content is merged into the first user message via `normalize_messages`. `supports_system_role(tokenizer)` is exposed for callers that need to branch on this.
+
+## Roleplay + MC combined
 
 ```python
 from persona_data.prompts import format_messages, format_mc_question, format_prompt, mc_correct_letter
 
-system_prompt    = format_prompt(persona, "biography")
-question_prompt  = format_mc_question(qa)
-correct          = mc_correct_letter(qa)
+system_prompt   = format_prompt(persona, "biography")
+question_prompt = format_mc_question(qa)
+correct         = mc_correct_letter(qa)
 
 messages = [
     {"role": "system", "content": system_prompt},
     {"role": "user",   "content": question_prompt},
 ]
-
 full_prompt, response_start_idx = format_messages(messages, tokenizer)
 ```
 
-The model should then reply with a single letter. Compare it against `correct` to score the response.
-
-See [SynthPersona](synth_persona.md) for filtering QA pairs by `type` and `item_type`.
+The model should reply with a single letter; compare against `correct` to score.

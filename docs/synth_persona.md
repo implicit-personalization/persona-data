@@ -127,7 +127,5 @@ To avoid train→test leakage, train rows are dropped if their `bank_id` matches
 
 ## Notes
 
-- `type` can be `"explicit"` or `"implicit"`.
-- `item_type` can be `"mcq"` (multiple-choice) or `"frq"` (free-response).
 - `sample_size` keeps a leading slice rather than sampling randomly.
-- The loader keeps the dataset eager and notebook-friendly rather than streaming.
+- The dataset is loaded eagerly into memory (notebook-friendly, not streaming).

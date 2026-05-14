@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Callable, Iterator
+from typing import Any, ClassVar, Iterator
 
 import pyarrow.parquet as pq
 from huggingface_hub import hf_hub_download, list_repo_files
@@ -68,62 +68,44 @@ def _split_name(display_name: str, fallback_id: str) -> tuple[str, str]:
     return parts[0], " ".join(parts[1:])
 
 
-def _templated_view_france(row: dict[str, Any], display_name: str) -> str:
-    lines = [
-        f"Name: {display_name}",
-        f"Age: {row.get('age', 'Unknown')}",
-        f"Sex: {row.get('sex', 'Unknown')}",
-        (
-            "Location: "
-            f"{row.get('commune', 'Unknown')}, "
-            f"{row.get('departement', 'Unknown')}, "
-            f"{row.get('country', 'Unknown')}"
-        ),
-        f"Occupation: {row.get('occupation', 'Unknown')}",
-        f"Education: {row.get('education_level', 'Unknown')}",
-        f"Marital status: {row.get('marital_status', 'Unknown')}",
-        f"Household type: {row.get('household_type', 'Unknown')}",
-        "",
-        f"Cultural background: {row.get('cultural_background', '')}".strip(),
-        f"Skills and expertise: {row.get('skills_and_expertise', '')}".strip(),
-        f"Hobbies and interests: {row.get('hobbies_and_interests', '')}".strip(),
-        (
-            f"Career goals and ambitions: {row.get('career_goals_and_ambitions', '')}"
-        ).strip(),
-    ]
-    return "\n".join(line for line in lines if line.strip())
+# Each locale assembles a templated view from these blocks, in order:
+#   Name -> _COMMON_HEADER -> Location(_LOCATION_KEYS) -> _MID_FIELDS
+#   -> blank line -> _COMMON_BIO
+# `(label, row_key)` pairs are rendered as `"{label}: {row.get(key, 'Unknown')}"`.
+# Bio rows fall back to empty string and are dropped if blank.
+_COMMON_HEADER: tuple[tuple[str, str], ...] = (
+    ("Age", "age"),
+    ("Sex", "sex"),
+)
+_COMMON_BIO: tuple[tuple[str, str], ...] = (
+    ("Cultural background", "cultural_background"),
+    ("Skills and expertise", "skills_and_expertise"),
+    ("Hobbies and interests", "hobbies_and_interests"),
+    ("Career goals and ambitions", "career_goals_and_ambitions"),
+)
 
 
-def _templated_view_usa(row: dict[str, Any], display_name: str) -> str:
-    lines = [
-        f"Name: {display_name}",
-        f"Age: {row.get('age', 'Unknown')}",
-        f"Sex: {row.get('sex', 'Unknown')}",
-        (
-            "Location: "
-            f"{row.get('city', 'Unknown')}, "
-            f"{row.get('state', 'Unknown')}, "
-            f"{row.get('zipcode', 'Unknown')}, "
-            f"{row.get('country', 'Unknown')}"
-        ),
-        f"Occupation: {row.get('occupation', 'Unknown')}",
-        f"Education: {row.get('education_level', 'Unknown')}",
-        f"Bachelors field: {row.get('bachelors_field', 'Unknown')}",
-        f"Marital status: {row.get('marital_status', 'Unknown')}",
-        "",
-        f"Cultural background: {row.get('cultural_background', '')}".strip(),
-        f"Skills and expertise: {row.get('skills_and_expertise', '')}".strip(),
-        f"Hobbies and interests: {row.get('hobbies_and_interests', '')}".strip(),
-        (
-            f"Career goals and ambitions: {row.get('career_goals_and_ambitions', '')}"
-        ).strip(),
-    ]
+def _build_templated_view(
+    row: dict[str, Any],
+    display_name: str,
+    *,
+    location_keys: tuple[str, ...],
+    mid_fields: tuple[tuple[str, str], ...],
+) -> str:
+    lines = [f"Name: {display_name}"]
+    lines.extend(f"{label}: {row.get(key, 'Unknown')}" for label, key in _COMMON_HEADER)
+    location = ", ".join(str(row.get(k, "Unknown")) for k in location_keys)
+    lines.append(f"Location: {location}")
+    lines.extend(f"{label}: {row.get(key, 'Unknown')}" for label, key in mid_fields)
+    lines.append("")
+    lines.extend(f"{label}: {row.get(key, '')}".strip() for label, key in _COMMON_BIO)
     return "\n".join(line for line in lines if line.strip())
 
 
 def _row_to_persona(
     row: dict[str, Any],
-    templated_view_builder: Callable[[dict[str, Any], str], str],
+    location_keys: tuple[str, ...],
+    mid_fields: tuple[tuple[str, str], ...],
 ) -> PersonaData:
     persona_text = str(row.get("persona", "")).strip()
     persona_id = str(row.get("uuid", "")).strip()
@@ -137,32 +119,38 @@ def _row_to_persona(
     return PersonaData(
         id=persona_id,
         persona=persona_dict,
-        templated_view=templated_view_builder(row, display_name),
+        templated_view=_build_templated_view(
+            row,
+            display_name,
+            location_keys=location_keys,
+            mid_fields=mid_fields,
+        ),
         biography_view=persona_text,
     )
 
 
 class _NemotronPersonasDatasetBase:
     supports_qa = False
+    DEFAULT_REPO: ClassVar[str]
+    _LOCATION_KEYS: ClassVar[tuple[str, ...]]
+    _MID_FIELDS: ClassVar[tuple[tuple[str, str], ...]]
 
     def __init__(
         self,
-        hf_repo: str,
+        hf_repo: str | None = None,
         *,
         sample_size: int = 200,
         rows: list[dict[str, Any]] | None = None,
     ) -> None:
-        self.hf_repo = hf_repo
+        self.hf_repo = hf_repo or self.DEFAULT_REPO
         self.sample_size = sample_size
         if rows is None:
-            rows = _fetch_rows(hf_repo=hf_repo, offset=0, length=sample_size)
+            rows = _fetch_rows(hf_repo=self.hf_repo, offset=0, length=sample_size)
         self._personas = [
-            _row_to_persona(row, self._build_templated_view) for row in rows
+            _row_to_persona(row, self._LOCATION_KEYS, self._MID_FIELDS)
+            for row in rows
         ]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
-
-    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
-        raise NotImplementedError
 
     def __len__(self) -> int:
         return len(self._personas)
@@ -187,33 +175,23 @@ class NemotronPersonasFranceDataset(_NemotronPersonasDatasetBase):
     """French persona-only dataset backed by `nvidia/Nemotron-Personas-France`."""
 
     DEFAULT_REPO = "nvidia/Nemotron-Personas-France"
-
-    def __init__(
-        self,
-        hf_repo: str = DEFAULT_REPO,
-        *,
-        sample_size: int = 200,
-        rows: list[dict[str, Any]] | None = None,
-    ) -> None:
-        super().__init__(hf_repo, sample_size=sample_size, rows=rows)
-
-    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
-        return _templated_view_france(row, display_name)
+    _LOCATION_KEYS = ("commune", "departement", "country")
+    _MID_FIELDS = (
+        ("Occupation", "occupation"),
+        ("Education", "education_level"),
+        ("Marital status", "marital_status"),
+        ("Household type", "household_type"),
+    )
 
 
 class NemotronPersonasUSADataset(_NemotronPersonasDatasetBase):
     """USA persona-only dataset backed by `nvidia/Nemotron-Personas-USA`."""
 
     DEFAULT_REPO = "nvidia/Nemotron-Personas-USA"
-
-    def __init__(
-        self,
-        hf_repo: str = DEFAULT_REPO,
-        *,
-        sample_size: int = 200,
-        rows: list[dict[str, Any]] | None = None,
-    ) -> None:
-        super().__init__(hf_repo, sample_size=sample_size, rows=rows)
-
-    def _build_templated_view(self, row: dict[str, Any], display_name: str) -> str:
-        return _templated_view_usa(row, display_name)
+    _LOCATION_KEYS = ("city", "state", "zipcode", "country")
+    _MID_FIELDS = (
+        ("Occupation", "occupation"),
+        ("Education", "education_level"),
+        ("Bachelors field", "bachelors_field"),
+        ("Marital status", "marital_status"),
+    )

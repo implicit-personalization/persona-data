@@ -31,16 +31,9 @@ def format_prompt(
     variant: Literal["templated", "biography"] = "templated",
     mode: Literal["roleplay", "conversational"] = "roleplay",
 ) -> str:
-    """Build a standard persona system prompt.
-
-    Args:
-        persona: A ``PersonaData`` (any persona, including the baseline
-            loaded as ``dataset.get_persona(BASELINE_PERSONA_ID)``) or raw
-            profile text.
-        variant: Which standard view to read when ``persona`` is a
-            ``PersonaData``. Ignored for raw profile text.
-        mode: ``"roleplay"`` (default) for the plain persona prompt, or
-            ``"conversational"`` to append a natural chat instruction.
+    """Build a persona system prompt. ``variant`` selects the view on a
+    ``PersonaData`` and is ignored when ``persona`` is raw text. ``mode`` of
+    ``"conversational"`` appends a natural-chat instruction.
     """
     if mode not in ("roleplay", "conversational"):
         raise ValueError(f"Unsupported mode: {mode!r}")
@@ -107,21 +100,13 @@ def format_messages(
     tokenizer,
     add_generation_prompt: bool = False,
 ) -> tuple[str, int]:
-    """Format a conversation for the model using its chat template.
+    """Apply the tokenizer's chat template, returning ``(full_prompt, response_start_idx)``.
 
-    Args:
-        messages: List of ``{"role", "content"}`` dicts. Roles may be
-            ``system``, ``user``, or ``assistant``.
-        tokenizer: Tokenizer with chat-template support.
-        add_generation_prompt: When ``False`` (extraction/training),
-            ``messages`` ends with the assistant turn to score, and the
-            returned index points at its first token. When ``True``
-            (inference), the generation-prompt prefix is appended and the
-            index equals the prompt length — slice generated sequences with
-            ``sequences[:, response_start_idx:]``.
-
-    Returns:
-        ``(full_prompt, response_start_idx)``.
+    When ``add_generation_prompt=False`` (extraction/training), ``messages``
+    ends with the assistant turn to score and ``response_start_idx`` points at
+    its first token. When ``True`` (inference), the generation-prompt prefix
+    is appended and ``response_start_idx`` equals the prompt length — slice
+    generations with ``sequences[:, response_start_idx:]``.
     """
     if not supports_system_role(tokenizer):
         messages = normalize_messages(messages)

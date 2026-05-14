@@ -1,8 +1,6 @@
 # PersonaGuess
 
-`PersonaGuessDataset` loads turn-based games where two personas ask each other questions.
-
-## Loader
+`PersonaGuessDataset` loads turn-based games where two personas ask each other questions from `implicit-personalization/persona-guess` (file: `games.jsonl`).
 
 ```python
 from persona_data.persona_guess import PersonaGuessDataset
@@ -11,46 +9,18 @@ games = PersonaGuessDataset()
 small = PersonaGuessDataset(sample_size=10)
 ```
 
-The default dataset source is `implicit-personalization/persona-guess`. The loader reads `games.jsonl`.
-
 `sample_size` keeps the leading games rather than sampling randomly.
 
 ## Records
 
-- `GameRecord`: one match between two personas
-- `Turn`: one question-answer turn within a game
-
-## Game fields
-
-`GameRecord` includes:
-
-- `game_id`
-- `persona_a_id`
-- `persona_b_id`
-- `turns`
-
-`Turn` includes:
-
-- `round`
-- `asker`
-- `question`
-- `answer`
+- `GameRecord(game_id, persona_a_id, persona_b_id, turns)`
+- `Turn(round, asker, question, answer)` — `asker` is `"A"` or `"B"`.
 
 ## Queries
 
 ```python
 game = games[0]
 
-turns = games.get_qa(game.game_id)
-turns = games.get_qa(game.game_id, player="A")
-
+turns_all = games.get_qa(game.game_id)             # all turns
+turns_a   = games.get_qa(game.game_id, player="A") # only A's turns
 ```
-
-`get_qa()` returns typed `Turn` records.
-
-## Notes
-
-- `player` can be `"A"`, `"B"`, or omitted for all turns.
-- `sample_size` can limit how many games are kept in memory.
-- `sample_size` keeps a leading slice rather than sampling randomly.
-- The dataset is small enough to load eagerly into memory.
