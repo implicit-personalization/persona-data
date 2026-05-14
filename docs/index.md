@@ -18,7 +18,7 @@ The [Prompt formatting](prompts.md) page covers helpers for roleplay prompts and
 
 - Loaders download from Hugging Face with `hf_hub_download`, including sharded parquet sources.
 - Dataset instances implement `__len__`, `__iter__`, and `__getitem__`.
-- Query helpers return typed records plus convenience string-only helpers.
+- Query helpers return typed records, such as `QAPair` or `Turn`.
 - New datasets should stay small, eager, and easy to inspect from a notebook; `sample_size` is usually a leading slice, not a random sample.
 
 See [Adding a dataset](adding-a-dataset.md) to contribute a new loader.

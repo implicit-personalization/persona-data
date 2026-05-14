@@ -32,4 +32,5 @@ nav:
   - PersonaGuess: persona_guess.md
   - Nemotron Personas: nemotron_personas.md
   - Prompt Formatting: prompts.md
+  - Environment Helpers: environment.md
   - Adding a Dataset: adding-a-dataset.md

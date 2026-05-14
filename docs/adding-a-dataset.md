@@ -8,7 +8,7 @@ New dataset modules should match the style of the existing loaders: eager, typed
 2. Download source files from Hugging Face with `hf_hub_download`.
 3. Load the records in `__init__` and keep them in memory.
 4. Implement `__len__`, `__iter__`, and `__getitem__`.
-5. Add query helpers for the dataset shape, such as `get_qa()` and `questions()`.
+5. Add query helpers for the dataset shape, such as `get_qa()` or `get_persona()`.
 
 ## Minimal example
 

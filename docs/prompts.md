@@ -76,7 +76,24 @@ messages = [
     {"role": "system", "content": system_prompt},
     {"role": "user",   "content": question_prompt},
 ]
-full_prompt, response_start_idx = format_messages(messages, tokenizer)
+full_prompt, response_start_idx = format_messages(
+    messages,
+    tokenizer,
+    add_generation_prompt=True,
+)
 ```
 
 The model should reply with a single letter; compare against `correct` to score.
+
+For training or activation extraction, include the gold assistant answer and
+leave `add_generation_prompt=False` so `response_start_idx` marks the first
+token of that answer:
+
+```python
+messages = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user",   "content": question_prompt},
+    {"role": "assistant", "content": correct},
+]
+full_prompt, response_start_idx = format_messages(messages, tokenizer)
+```
