@@ -17,6 +17,7 @@ The default dataset source is `implicit-personalization/synth-persona`. The load
 - `dataset_qa.jsonl`
 - `implicit_shared_mc_bank.json` (used to hydrate `QAPair.related_frq_qids` on implicit shared MCQs)
 - `attribute_schema.json`, when present (used to expose clean attribute names and ordinal encodings)
+- `question_registry.jsonl`, when present (used for semantic topic and evaluation-set filters)
 
 `sample_size` keeps the leading personas and filters QA rows to the loaded persona IDs. The persona-less Assistant baseline is an ordinary persona row (`id="baseline_assistant"`, exported as `BASELINE_PERSONA_ID`).
 
@@ -75,6 +76,10 @@ persona.persona["state"]  # raw structured attributes
 persona.statements        # list of Statement
 ```
 
+Index by position with `dataset[i]`, iterate the dataset directly, or look one
+up by id with `dataset.get_persona(id)` (returns `None` if the id is not
+loaded).
+
 `persona` is the raw structured attribute dictionary. Use the dataset helpers
 when you need values aligned to a persona id list:
 
@@ -109,11 +114,22 @@ persona = dataset[0]
 
 qa_pairs = dataset.get_qa(persona.id)
 qa_pairs = dataset.get_qa(persona.id, type="explicit", item_type="mcq")
-
-loaded_persona = dataset.get_persona("p1")
+religion = dataset.get_qa(persona.id, type="implicit", topic_group_id="religion_spirituality_and_meaning")
+study_eval = dataset.get_qa(persona.id, item_type="mcq", question_set="qa_eval_v1")
 ```
 
 `get_qa()` returns typed `QAPair` records.
+
+`type` filters explicit versus implicit rows. `topic_group_id` filters the
+semantic topic of a question, independent of whether the row is explicit or
+implicit. `question_set` filters curated evaluation sets, such as a subset of
+multiple-choice questions selected for a benchmark run. Topic and question-set
+filters require `question_registry.jsonl`.
+
+`question_registry.jsonl` is one JSON object per question. Shared bank items
+should be keyed by `bank_id`; individual rows should be keyed by `qid`.
+`topic_group_id` is an optional string, and `question_sets` is an optional list
+of strings.
 
 ### Train/test split
 
@@ -128,4 +144,8 @@ To avoid train→test leakage, train rows are dropped if their `bank_id` matches
 ## Notes
 
 - `sample_size` keeps a leading slice rather than sampling randomly.
-- The dataset is loaded eagerly into memory (notebook-friendly, not streaming).
+- Personas load eagerly; QA (~1 GB) is loaded and parsed lazily on the first
+  `get_qa()` call, so attribute-only work never pays for it. The parse result
+  is cached next to the immutable Hugging Face blob, so later runs skip it.
+- Call `dataset.prefetch_qa()` (safe from a background thread) to warm that
+  cache ahead of time so the first `get_qa()` does not block.

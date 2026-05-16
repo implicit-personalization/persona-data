@@ -5,7 +5,7 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal, NamedTuple
 
 import orjson  # ~4x faster JSON parsing than stdlib
 
@@ -15,6 +15,13 @@ _QA_CACHE_VERSION = 1
 BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
 _DEFAULT_ATTRIBUTE_EXCLUDE = {"first_name", "last_name"}
+class QuestionMeta(NamedTuple):
+    topic_group_id: str | None
+    question_sets: frozenset[str]
+
+
+# Metadata indexed by question bank_id and qid.
+QuestionRegistry = dict[str, QuestionMeta]
 
 
 @dataclass
@@ -115,6 +122,27 @@ def _read_json(path: Path | str | None) -> dict:
         return json.load(f)
 
 
+def _read_question_registry(path: Path | str | None) -> QuestionRegistry:
+    """Index question metadata by bank_id and qid, validating types once."""
+    if path is None:
+        return {}
+    registry: QuestionRegistry = {}
+    for row in _read_jsonl(path):
+        topic_group_id = row.get("topic_group_id")
+        if topic_group_id is not None and not isinstance(topic_group_id, str):
+            raise ValueError("topic_group_id must be a string")
+        question_sets = row.get("question_sets", [])
+        if not isinstance(question_sets, list) or not all(
+            isinstance(v, str) for v in question_sets
+        ):
+            raise ValueError("question_sets must be a list of strings")
+        meta = QuestionMeta(topic_group_id, frozenset(question_sets))
+        for key in (row.get("bank_id"), row.get("qid")):
+            if key:
+                registry[key] = meta
+    return registry
+
+
 def _ordinal_value_map(field_info: dict) -> dict[Any, float]:
     ordered = field_info.get("ordered_values")
     if not isinstance(ordered, list):
@@ -154,6 +182,8 @@ class PersonaDataset:
         related_frq_qids_by_bank_id: dict[str, list[str]] | None = None,
         attribute_schema_path: Path | str | None = None,
         attribute_schema_loader: Callable[[], dict] | None = None,
+        question_registry_path: Path | str | None = None,
+        question_registry_loader: Callable[[], QuestionRegistry] | None = None,
         sample_size: int | None = None,
     ) -> None:
         self._attribute_schema_path = attribute_schema_path
@@ -161,6 +191,9 @@ class PersonaDataset:
         self._attribute_schema: dict | None = None
         self._attribute_fields: dict[str, dict] = {}
         self._attribute_ordinal_maps: dict[str, dict[Any, float]] = {}
+        self._question_registry_path = question_registry_path
+        self._question_registry_loader = question_registry_loader
+        self._question_registry: QuestionRegistry | None = None
         self._personas: list[PersonaData] = []
         self._personas_by_id: dict[str, PersonaData] = {}
 
@@ -237,6 +270,25 @@ class PersonaDataset:
             if (ordinal_map := _ordinal_value_map(info))
         }
         return self._attribute_schema
+
+    def _load_question_registry(self) -> QuestionRegistry:
+        if self._question_registry is not None:
+            return self._question_registry
+        if self._question_registry_loader is not None:
+            self._question_registry = self._question_registry_loader()
+        else:
+            self._question_registry = _read_question_registry(
+                self._question_registry_path
+            )
+        return self._question_registry
+
+    def _require_question_registry(self) -> QuestionRegistry:
+        registry = self._load_question_registry()
+        if not registry:
+            raise ValueError(
+                "Question registry is required for topic_group_id or question_set filters"
+            )
+        return registry
 
     def _schema_attribute_names(self) -> tuple[str, ...]:
         return tuple(
@@ -323,8 +375,10 @@ class PersonaDataset:
         type: Literal["explicit", "implicit"] | None = None,
         item_type: Literal["mcq", "frq"] | None = None,
         scope: Literal["individual", "shared"] | None = None,
+        topic_group_id: str | None = None,
+        question_set: str | None = None,
     ) -> list[QAPair]:
-        """Return QA pairs for a persona, optionally filtered by type / item_type."""
+        """Return QA pairs for a persona, optionally filtered by metadata."""
         pairs = self._load_qa().get(persona_id, [])
         if type is not None:
             pairs = [p for p in pairs if p.type == type]
@@ -332,6 +386,18 @@ class PersonaDataset:
             pairs = [p for p in pairs if p.item_type == item_type]
         if scope is not None:
             pairs = [p for p in pairs if p.scope == scope]
+        if topic_group_id is not None or question_set is not None:
+            registry = self._require_question_registry()
+
+            def matches(p: QAPair) -> bool:
+                meta = registry.get(p.bank_id or "") or registry.get(p.qid)
+                if meta is None:
+                    return False
+                if topic_group_id is not None and meta.topic_group_id != topic_group_id:
+                    return False
+                return question_set is None or question_set in meta.question_sets
+
+            pairs = [p for p in pairs if matches(p)]
         return pairs
 
     def train_test_split(
@@ -409,6 +475,15 @@ class SynthPersonaDataset(PersonaDataset):
                 return {}
             return _read_json(attribute_schema_path)
 
+        def load_question_registry() -> QuestionRegistry:
+            try:
+                question_registry_path = hf_hub_download(
+                    hf_repo, "question_registry.jsonl", repo_type="dataset"
+                )
+            except (EntryNotFoundError, LocalEntryNotFoundError):
+                return {}
+            return _read_question_registry(question_registry_path)
+
         super().__init__(
             personas_path=hf_hub_download(
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
@@ -418,5 +493,6 @@ class SynthPersonaDataset(PersonaDataset):
             ),
             related_frq_qids_by_bank_id=related_map,
             attribute_schema_loader=load_attribute_schema,
+            question_registry_loader=load_question_registry,
             sample_size=sample_size,
         )
