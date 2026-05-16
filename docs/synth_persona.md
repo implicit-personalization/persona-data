@@ -17,6 +17,7 @@ The default dataset source is `implicit-personalization/synth-persona`. The load
 - `dataset_qa.jsonl`
 - `implicit_shared_mc_bank.json` (used to hydrate `QAPair.related_frq_qids` on implicit shared MCQs)
 - `attribute_schema.json`, when present (used to expose clean attribute names and ordinal encodings)
+- `question_registry.jsonl`, when present (used for semantic topic and evaluation-set filters)
 
 `sample_size` keeps the leading personas and filters QA rows to the loaded persona IDs. The persona-less Assistant baseline is an ordinary persona row (`id="baseline_assistant"`, exported as `BASELINE_PERSONA_ID`).
 
@@ -109,11 +110,34 @@ persona = dataset[0]
 
 qa_pairs = dataset.get_qa(persona.id)
 qa_pairs = dataset.get_qa(persona.id, type="explicit", item_type="mcq")
+religion_implicit = dataset.get_qa(
+    persona.id,
+    type="implicit",
+    topic_group_id="religion_spirituality_and_meaning",
+)
+study_eval = dataset.get_qa(
+    persona.id,
+    item_type="mcq",
+    question_set="qa_eval_v1",
+)
 
 loaded_persona = dataset.get_persona("p1")
 ```
 
 `get_qa()` returns typed `QAPair` records.
+
+`type` filters explicit versus implicit rows. `topic_group_id` filters the
+semantic topic of a question, independent of whether the row is explicit or
+implicit. `question_set` filters curated evaluation sets, such as a subset of
+multiple-choice questions selected for a benchmark run. Topic and question-set
+filters require `question_registry.jsonl`; if that registry is not available,
+requesting those filters raises an error instead of silently returning
+unfiltered data.
+
+`question_registry.jsonl` is one JSON object per question. Shared bank items
+should be keyed by `bank_id`; individual rows should be keyed by `qid`.
+`topic_group_id` is an optional string, and `question_sets` is an optional list
+of strings.
 
 ### Train/test split
 

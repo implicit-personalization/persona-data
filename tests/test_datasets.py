@@ -384,6 +384,49 @@ def test_synth_persona_dataset_tolerates_missing_attribute_schema(tmp_path: Path
         assert ds.attribute_schema == {}
 
 
+def test_synth_persona_dataset_loads_question_registry_lazily(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    bank_path = tmp_path / "implicit_shared_mc_bank.json"
+    bank_path.write_text(json.dumps({"items": []}))
+    registry_path = tmp_path / "question_registry.jsonl"
+    registry_path.write_text(
+        json.dumps(
+            {
+                "bank_id": "implicit_shared_1",
+                "topic_group_id": "religion_spirituality_and_meaning",
+            }
+        )
+        + "\n"
+    )
+    requested_files: list[str] = []
+
+    def fake_hf_hub_download(hf_repo: str, filename: str, repo_type: str) -> str:
+        assert hf_repo == "test/repo"
+        assert repo_type == "dataset"
+        requested_files.append(filename)
+        if filename == "dataset_personas.jsonl":
+            return str(personas_path)
+        if filename == "dataset_qa.jsonl":
+            return str(qa_path)
+        if filename == "implicit_shared_mc_bank.json":
+            return str(bank_path)
+        if filename == "question_registry.jsonl":
+            return str(registry_path)
+        raise AssertionError(f"Unexpected download: {filename}")
+
+    with patch("huggingface_hub.hf_hub_download", side_effect=fake_hf_hub_download):
+        ds = SynthPersonaDataset(hf_repo="test/repo")
+        assert "question_registry.jsonl" not in requested_files
+        assert [
+            q.qid
+            for q in ds.get_qa(
+                "p1",
+                topic_group_id="religion_spirituality_and_meaning",
+            )
+        ] == ["q4"]
+        assert "question_registry.jsonl" in requested_files
+
+
 
 def test_persona_dataset_baseline_is_a_normal_sampled_persona(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
@@ -410,6 +453,96 @@ def test_persona_dataset_qa_filters_by_type_and_item_type(tmp_path: Path):
     assert [q.qid for q in ds.get_qa("p1", type="explicit")] == ["q1", "q3", "q5"]
     assert [q.qid for q in ds.get_qa("p1", item_type="mcq")] == ["q2", "q3", "q4", "q5"]
     assert [q.qid for q in ds.get_qa("p1", scope="shared")] == ["q4", "q5"]
+
+
+def test_persona_dataset_qa_filters_by_question_registry(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    registry_path = tmp_path / "question_registry.jsonl"
+    registry_rows = [
+        {
+            "qid": "q2",
+            "topic_group_id": "work_identity_and_competence",
+        },
+        {
+            "bank_id": "implicit_shared_1",
+            "topic_group_id": "religion_spirituality_and_meaning",
+            "question_sets": ["qa_eval_v1"],
+        },
+        {
+            "bank_id": "explicit_name",
+            "topic_group_id": "demographics_and_background",
+            "question_sets": ["explicit_control_v1"],
+        },
+    ]
+    registry_path.write_text("\n".join(json.dumps(row) for row in registry_rows) + "\n")
+    ds = PersonaDataset(personas_path, qa_path, question_registry_path=registry_path)
+
+    assert [
+        q.qid
+        for q in ds.get_qa("p1", topic_group_id="work_identity_and_competence")
+    ] == ["q2"]
+    assert [
+        q.qid
+        for q in ds.get_qa(
+            "p1",
+            type="implicit",
+            topic_group_id="religion_spirituality_and_meaning",
+        )
+    ] == ["q4"]
+    assert [
+        q.qid
+        for q in ds.get_qa(
+            "p1",
+            type="explicit",
+            topic_group_id="demographics_and_background",
+        )
+    ] == ["q1", "q5"]
+    assert [
+        q.qid
+        for q in ds.get_qa(
+            "p1",
+            item_type="mcq",
+            question_set="qa_eval_v1",
+        )
+    ] == ["q4"]
+    assert [
+        q.qid
+        for q in ds.get_qa(
+            "p1",
+            type="implicit",
+            item_type="mcq",
+            topic_group_id="religion_spirituality_and_meaning",
+            question_set="qa_eval_v1",
+        )
+    ] == ["q4"]
+    assert (
+        ds.get_qa(
+            "p1",
+            topic_group_id="work_identity_and_competence",
+            question_set="qa_eval_v1",
+        )
+        == []
+    )
+
+
+def test_persona_dataset_qa_metadata_filters_require_registry(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    ds = PersonaDataset(personas_path, qa_path)
+
+    with pytest.raises(ValueError, match="Question registry"):
+        ds.get_qa("p1", topic_group_id="religion_spirituality_and_meaning")
+
+
+def test_persona_dataset_rejects_invalid_question_registry(tmp_path: Path):
+    personas_path, qa_path = _write_persona_fixture(tmp_path)
+    registry_path = tmp_path / "question_registry.jsonl"
+    registry_path.write_text(
+        json.dumps({"qid": "q2", "question_sets": "qa_eval_v1"}) + "\n"
+    )
+    ds = PersonaDataset(personas_path, qa_path, question_registry_path=registry_path)
+
+    with pytest.raises(ValueError, match="question_sets"):
+        ds.get_qa("p1", question_set="qa_eval_v1")
 
 
 def test_persona_dataset_train_test_split_drops_leaking_train_rows(tmp_path: Path):
