@@ -1,9 +1,16 @@
 import json
+import pickle
 import random
+import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator, Literal
+
+import orjson  # ~4x faster JSON parsing than stdlib
+
+# Bump when QAPair/parse logic changes so stale parse caches are ignored.
+_QA_CACHE_VERSION = 1
 
 BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
@@ -95,11 +102,10 @@ def _parse_qa(d: dict, related_map: dict[str, list[str]]) -> "QAPair":
 
 
 def _read_jsonl(path: Path | str) -> Iterator[dict]:
-    with open(path) as f:
+    with open(path, "rb") as f:
         for line in f:
-            line = line.strip()
-            if line:
-                yield json.loads(line)
+            if line.strip():
+                yield orjson.loads(line)
 
 
 def _read_json(path: Path | str | None) -> dict:
@@ -143,7 +149,7 @@ class PersonaDataset:
     def __init__(
         self,
         personas_path: Path | str,
-        qa_path: Path | str,
+        qa_path: Path | str | Callable[[], Path | str],
         *,
         related_frq_qids_by_bank_id: dict[str, list[str]] | None = None,
         attribute_schema_path: Path | str | None = None,
@@ -166,12 +172,13 @@ class PersonaDataset:
             self._personas_by_id[persona.id] = persona
         self._persona_ids = tuple(persona.id for persona in self._personas)
 
-        loaded_ids = set(self._personas_by_id)
-        related_map = related_frq_qids_by_bank_id or {}
-        self._qa: dict[str, list[QAPair]] = defaultdict(list)
-        for d in _read_jsonl(qa_path):
-            if d["id"] in loaded_ids:
-                self._qa[d["id"]].append(_parse_qa(d, related_map))
+        # QA is large (~1 GB) and unused by attribute-only callers (e.g.
+        # probes), so defer it until the first get_qa access. ``qa_path`` may
+        # be a callable to also defer resolving/downloading the file itself.
+        self._qa_path = qa_path
+        self._qa_related_map = related_frq_qids_by_bank_id or {}
+        self._qa: dict[str, list[QAPair]] | None = None
+        self._qa_lock = threading.Lock()
 
         self._inferred_attribute_names = tuple(
             sorted(
@@ -273,6 +280,43 @@ class PersonaDataset:
             )
         return values
 
+    def _load_qa(self) -> dict[str, list[QAPair]]:
+        if self._qa is not None:
+            return self._qa
+        with self._qa_lock:
+            if self._qa is not None:  # filled while we waited on the lock
+                return self._qa
+            qa_path = self._qa_path() if callable(self._qa_path) else self._qa_path
+            # HF blobs are immutable, so a pickle next to the resolved blob is
+            # a safe parse cache: skips the ~10s JSON+dataclass build on reuse.
+            resolved = Path(qa_path).resolve()
+            cache = resolved.with_name(f"{resolved.name}.qa{_QA_CACHE_VERSION}.pkl")
+            if cache.exists():
+                with open(cache, "rb") as f:
+                    self._qa = pickle.load(f)
+                return self._qa
+
+            loaded_ids = set(self._personas_by_id)
+            qa: dict[str, list[QAPair]] = defaultdict(list)
+            for d in _read_jsonl(qa_path):
+                if d["id"] in loaded_ids:
+                    qa[d["id"]].append(_parse_qa(d, self._qa_related_map))
+            try:
+                with open(cache, "wb") as f:
+                    pickle.dump(dict(qa), f, protocol=pickle.HIGHEST_PROTOCOL)
+            except OSError:
+                pass  # read-only cache dir: parse cost just isn't amortized
+            self._qa = qa
+            return self._qa
+
+    def prefetch_qa(self) -> None:
+        """Parse and cache QA now so a later ``get_qa`` doesn't block.
+
+        Safe to call from a background thread; the lock in ``_load_qa``
+        coalesces a concurrent first ``get_qa`` onto the same parse.
+        """
+        self._load_qa()
+
     def get_qa(
         self,
         persona_id: str,
@@ -281,7 +325,7 @@ class PersonaDataset:
         scope: Literal["individual", "shared"] | None = None,
     ) -> list[QAPair]:
         """Return QA pairs for a persona, optionally filtered by type / item_type."""
-        pairs = self._qa.get(persona_id, [])
+        pairs = self._load_qa().get(persona_id, [])
         if type is not None:
             pairs = [p for p in pairs if p.type == type]
         if item_type is not None:
@@ -369,7 +413,9 @@ class SynthPersonaDataset(PersonaDataset):
             personas_path=hf_hub_download(
                 hf_repo, "dataset_personas.jsonl", repo_type="dataset"
             ),
-            qa_path=hf_hub_download(hf_repo, "dataset_qa.jsonl", repo_type="dataset"),
+            qa_path=lambda: hf_hub_download(
+                hf_repo, "dataset_qa.jsonl", repo_type="dataset"
+            ),
             related_frq_qids_by_bank_id=related_map,
             attribute_schema_loader=load_attribute_schema,
             sample_size=sample_size,
