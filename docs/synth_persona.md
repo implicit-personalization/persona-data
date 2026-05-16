@@ -76,6 +76,10 @@ persona.persona["state"]  # raw structured attributes
 persona.statements        # list of Statement
 ```
 
+Index by position with `dataset[i]`, iterate the dataset directly, or look one
+up by id with `dataset.get_persona(id)` (returns `None` if the id is not
+loaded).
+
 `persona` is the raw structured attribute dictionary. Use the dataset helpers
 when you need values aligned to a persona id list:
 
@@ -110,18 +114,8 @@ persona = dataset[0]
 
 qa_pairs = dataset.get_qa(persona.id)
 qa_pairs = dataset.get_qa(persona.id, type="explicit", item_type="mcq")
-religion_implicit = dataset.get_qa(
-    persona.id,
-    type="implicit",
-    topic_group_id="religion_spirituality_and_meaning",
-)
-study_eval = dataset.get_qa(
-    persona.id,
-    item_type="mcq",
-    question_set="qa_eval_v1",
-)
-
-loaded_persona = dataset.get_persona("p1")
+religion = dataset.get_qa(persona.id, type="implicit", topic_group_id="religion_spirituality_and_meaning")
+study_eval = dataset.get_qa(persona.id, item_type="mcq", question_set="qa_eval_v1")
 ```
 
 `get_qa()` returns typed `QAPair` records.
@@ -130,9 +124,7 @@ loaded_persona = dataset.get_persona("p1")
 semantic topic of a question, independent of whether the row is explicit or
 implicit. `question_set` filters curated evaluation sets, such as a subset of
 multiple-choice questions selected for a benchmark run. Topic and question-set
-filters require `question_registry.jsonl`; if that registry is not available,
-requesting those filters raises an error instead of silently returning
-unfiltered data.
+filters require `question_registry.jsonl`.
 
 `question_registry.jsonl` is one JSON object per question. Shared bank items
 should be keyed by `bank_id`; individual rows should be keyed by `qid`.
@@ -152,4 +144,8 @@ To avoid train→test leakage, train rows are dropped if their `bank_id` matches
 ## Notes
 
 - `sample_size` keeps a leading slice rather than sampling randomly.
-- The dataset is loaded eagerly into memory (notebook-friendly, not streaming).
+- Personas load eagerly; QA (~1 GB) is loaded and parsed lazily on the first
+  `get_qa()` call, so attribute-only work never pays for it. The parse result
+  is cached next to the immutable Hugging Face blob, so later runs skip it.
+- Call `dataset.prefetch_qa()` (safe from a background thread) to warm that
+  cache ahead of time so the first `get_qa()` does not block.

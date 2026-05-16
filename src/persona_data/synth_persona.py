@@ -5,7 +5,7 @@ import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Iterator, Literal
+from typing import Any, Callable, Iterator, Literal, NamedTuple
 
 import orjson  # ~4x faster JSON parsing than stdlib
 
@@ -15,8 +15,13 @@ _QA_CACHE_VERSION = 1
 BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
 _DEFAULT_ATTRIBUTE_EXCLUDE = {"first_name", "last_name"}
-QuestionMetadata = dict[str, Any]
-QuestionRegistry = dict[str, QuestionMetadata]
+class QuestionMeta(NamedTuple):
+    topic_group_id: str | None
+    question_sets: frozenset[str]
+
+
+# Metadata indexed by question bank_id and qid.
+QuestionRegistry = dict[str, QuestionMeta]
 
 
 @dataclass
@@ -118,68 +123,24 @@ def _read_json(path: Path | str | None) -> dict:
 
 
 def _read_question_registry(path: Path | str | None) -> QuestionRegistry:
+    """Index question metadata by bank_id and qid, validating types once."""
     if path is None:
         return {}
-    return _index_question_registry(_read_jsonl(path))
-
-
-def _question_registry_keys(row: dict) -> list[str]:
-    keys = [key for key in (row.get("bank_id"), row.get("qid")) if key]
-    if not keys:
-        raise ValueError("Question registry rows must include bank_id or qid")
-    return keys
-
-
-def _index_question_registry(rows: Iterator[dict] | list[dict]) -> QuestionRegistry:
     registry: QuestionRegistry = {}
-    for row in rows:
-        keys = _question_registry_keys(row)
-        metadata = dict(row)
-        _validate_question_metadata(metadata)
-        for key in keys:
-            existing = registry.get(key)
-            if existing is not None and existing != metadata:
-                raise ValueError(f"Conflicting question registry metadata for {key!r}")
-            registry[key] = metadata
+    for row in _read_jsonl(path):
+        topic_group_id = row.get("topic_group_id")
+        if topic_group_id is not None and not isinstance(topic_group_id, str):
+            raise ValueError("topic_group_id must be a string")
+        question_sets = row.get("question_sets", [])
+        if not isinstance(question_sets, list) or not all(
+            isinstance(v, str) for v in question_sets
+        ):
+            raise ValueError("question_sets must be a list of strings")
+        meta = QuestionMeta(topic_group_id, frozenset(question_sets))
+        for key in (row.get("bank_id"), row.get("qid")):
+            if key:
+                registry[key] = meta
     return registry
-
-
-def _metadata_topic_group_id(metadata: QuestionMetadata) -> str | None:
-    value = metadata.get("topic_group_id")
-    if value is None or isinstance(value, str):
-        return value
-    raise ValueError("topic_group_id must be a string")
-
-
-def _metadata_question_sets(metadata: QuestionMetadata) -> set[str]:
-    value = metadata.get("question_sets", [])
-    if not isinstance(value, list):
-        raise ValueError("question_sets must be a list of strings")
-    if not all(isinstance(v, str) for v in value):
-        raise ValueError("question_sets must be a list of strings")
-    return set(value)
-
-
-def _validate_question_metadata(metadata: QuestionMetadata) -> None:
-    _metadata_topic_group_id(metadata)
-    _metadata_question_sets(metadata)
-
-
-def _metadata_matches(
-    metadata: QuestionMetadata,
-    *,
-    topic_group_id: str | None = None,
-    question_set: str | None = None,
-) -> bool:
-    if topic_group_id is not None and topic_group_id != _metadata_topic_group_id(
-        metadata
-    ):
-        return False
-    if question_set is not None and question_set not in _metadata_question_sets(
-        metadata
-    ):
-        return False
-    return True
 
 
 def _ordinal_value_map(field_info: dict) -> dict[Any, float]:
@@ -321,13 +282,6 @@ class PersonaDataset:
             )
         return self._question_registry
 
-    def _question_metadata(self, qa: QAPair) -> QuestionMetadata | None:
-        registry = self._load_question_registry()
-        for key in (qa.bank_id, qa.qid):
-            if key and key in registry:
-                return registry[key]
-        return None
-
     def _require_question_registry(self) -> QuestionRegistry:
         registry = self._load_question_registry()
         if not registry:
@@ -433,20 +387,17 @@ class PersonaDataset:
         if scope is not None:
             pairs = [p for p in pairs if p.scope == scope]
         if topic_group_id is not None or question_set is not None:
-            self._require_question_registry()
-            filtered = []
-            for pair in pairs:
-                metadata = self._question_metadata(pair)
-                if metadata is None:
-                    continue
-                if not _metadata_matches(
-                    metadata,
-                    topic_group_id=topic_group_id,
-                    question_set=question_set,
-                ):
-                    continue
-                filtered.append(pair)
-            pairs = filtered
+            registry = self._require_question_registry()
+
+            def matches(p: QAPair) -> bool:
+                meta = registry.get(p.bank_id or "") or registry.get(p.qid)
+                if meta is None:
+                    return False
+                if topic_group_id is not None and meta.topic_group_id != topic_group_id:
+                    return False
+                return question_set is None or question_set in meta.question_sets
+
+            pairs = [p for p in pairs if matches(p)]
         return pairs
 
     def train_test_split(

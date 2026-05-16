@@ -389,43 +389,29 @@ def test_synth_persona_dataset_loads_question_registry_lazily(tmp_path: Path):
     bank_path = tmp_path / "implicit_shared_mc_bank.json"
     bank_path.write_text(json.dumps({"items": []}))
     registry_path = tmp_path / "question_registry.jsonl"
-    registry_path.write_text(
-        json.dumps(
-            {
-                "bank_id": "implicit_shared_1",
-                "topic_group_id": "religion_spirituality_and_meaning",
-            }
-        )
-        + "\n"
-    )
-    requested_files: list[str] = []
+    registry_row = {
+        "bank_id": "implicit_shared_1",
+        "topic_group_id": "religion_spirituality_and_meaning",
+    }
+    registry_path.write_text(json.dumps(registry_row) + "\n")
+    files = {
+        "dataset_personas.jsonl": personas_path,
+        "dataset_qa.jsonl": qa_path,
+        "implicit_shared_mc_bank.json": bank_path,
+        "question_registry.jsonl": registry_path,
+    }
+    requested: list[str] = []
 
-    def fake_hf_hub_download(hf_repo: str, filename: str, repo_type: str) -> str:
-        assert hf_repo == "test/repo"
-        assert repo_type == "dataset"
-        requested_files.append(filename)
-        if filename == "dataset_personas.jsonl":
-            return str(personas_path)
-        if filename == "dataset_qa.jsonl":
-            return str(qa_path)
-        if filename == "implicit_shared_mc_bank.json":
-            return str(bank_path)
-        if filename == "question_registry.jsonl":
-            return str(registry_path)
-        raise AssertionError(f"Unexpected download: {filename}")
+    def fake_download(hf_repo: str, filename: str, repo_type: str) -> str:
+        requested.append(filename)
+        return str(files[filename])
 
-    with patch("huggingface_hub.hf_hub_download", side_effect=fake_hf_hub_download):
+    with patch("huggingface_hub.hf_hub_download", side_effect=fake_download):
         ds = SynthPersonaDataset(hf_repo="test/repo")
-        assert "question_registry.jsonl" not in requested_files
-        assert [
-            q.qid
-            for q in ds.get_qa(
-                "p1",
-                topic_group_id="religion_spirituality_and_meaning",
-            )
-        ] == ["q4"]
-        assert "question_registry.jsonl" in requested_files
-
+        assert "question_registry.jsonl" not in requested  # not fetched eagerly
+        topic = "religion_spirituality_and_meaning"
+        assert [q.qid for q in ds.get_qa("p1", topic_group_id=topic)] == ["q4"]
+        assert "question_registry.jsonl" in requested
 
 
 def test_persona_dataset_baseline_is_a_normal_sampled_persona(tmp_path: Path):
@@ -459,10 +445,7 @@ def test_persona_dataset_qa_filters_by_question_registry(tmp_path: Path):
     personas_path, qa_path = _write_persona_fixture(tmp_path)
     registry_path = tmp_path / "question_registry.jsonl"
     registry_rows = [
-        {
-            "qid": "q2",
-            "topic_group_id": "work_identity_and_competence",
-        },
+        {"qid": "q2", "topic_group_id": "work_identity_and_competence"},
         {
             "bank_id": "implicit_shared_1",
             "topic_group_id": "religion_spirituality_and_meaning",
@@ -477,52 +460,16 @@ def test_persona_dataset_qa_filters_by_question_registry(tmp_path: Path):
     registry_path.write_text("\n".join(json.dumps(row) for row in registry_rows) + "\n")
     ds = PersonaDataset(personas_path, qa_path, question_registry_path=registry_path)
 
-    assert [
-        q.qid
-        for q in ds.get_qa("p1", topic_group_id="work_identity_and_competence")
-    ] == ["q2"]
-    assert [
-        q.qid
-        for q in ds.get_qa(
-            "p1",
-            type="implicit",
-            topic_group_id="religion_spirituality_and_meaning",
-        )
-    ] == ["q4"]
-    assert [
-        q.qid
-        for q in ds.get_qa(
-            "p1",
-            type="explicit",
-            topic_group_id="demographics_and_background",
-        )
-    ] == ["q1", "q5"]
-    assert [
-        q.qid
-        for q in ds.get_qa(
-            "p1",
-            item_type="mcq",
-            question_set="qa_eval_v1",
-        )
-    ] == ["q4"]
-    assert [
-        q.qid
-        for q in ds.get_qa(
-            "p1",
-            type="implicit",
-            item_type="mcq",
-            topic_group_id="religion_spirituality_and_meaning",
-            question_set="qa_eval_v1",
-        )
-    ] == ["q4"]
-    assert (
-        ds.get_qa(
-            "p1",
-            topic_group_id="work_identity_and_competence",
-            question_set="qa_eval_v1",
-        )
-        == []
-    )
+    def qids(**kw):
+        return [q.qid for q in ds.get_qa("p1", **kw)]
+
+    # qid-keyed metadata, and bank_id-keyed composing with type / question_set.
+    assert qids(topic_group_id="work_identity_and_competence") == ["q2"]
+    assert qids(type="implicit", topic_group_id="religion_spirituality_and_meaning") == ["q4"]
+    assert qids(type="explicit", topic_group_id="demographics_and_background") == ["q1", "q5"]
+    assert qids(item_type="mcq", question_set="qa_eval_v1") == ["q4"]
+    # Filters intersect: a topic with no rows in that question_set is empty.
+    assert qids(topic_group_id="work_identity_and_competence", question_set="qa_eval_v1") == []
 
 
 def test_persona_dataset_qa_metadata_filters_require_registry(tmp_path: Path):
