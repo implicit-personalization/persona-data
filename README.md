@@ -64,6 +64,11 @@ religion = dataset.get_qa(persona.id, type="implicit",
                           topic_group_id="religion_spirituality_and_meaning")
 eval_mc  = dataset.get_qa(persona.id, item_type="mcq",
                           question_set="study_model_evaluable_v1")
+
+# Minimal-pair counterfactual: same persona, one attribute swapped in the
+# templated view (binary attributes default to the opposite value).
+from persona_data.templated import swap_attribute
+base, swapped = swap_attribute(dataset, persona.id, "speak_other_language")
 ```
 
 Pass `sample_size=N` to load only the first `N` personas.
@@ -73,6 +78,7 @@ Pass `sample_size=N` to load only the first `N` personas.
 - `SynthPersonaDataset` — personas + QA pairs ([docs](https://implicit-personalization.github.io/persona-data/synth_persona/))
 - `NemotronPersonasFranceDataset` / `NemotronPersonasUSADataset` — NVIDIA persona-only datasets ([docs](https://implicit-personalization.github.io/persona-data/nemotron_personas/))
 - `prompts` — roleplay and multiple-choice formatting helpers ([docs](https://implicit-personalization.github.io/persona-data/prompts/))
+- `templated` — single-attribute counterfactual swaps on the templated view ([docs](https://implicit-personalization.github.io/persona-data/templated/))
 - `environment` — `set_seed`, `get_device`, `get_artifacts_dir`
 
 Full API reference: <https://implicit-personalization.github.io/persona-data/>.

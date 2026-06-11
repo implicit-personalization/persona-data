@@ -147,8 +147,7 @@ class _NemotronPersonasDatasetBase:
         if rows is None:
             rows = _fetch_rows(hf_repo=self.hf_repo, offset=0, length=sample_size)
         self._personas = [
-            _row_to_persona(row, self._LOCATION_KEYS, self._MID_FIELDS)
-            for row in rows
+            _row_to_persona(row, self._LOCATION_KEYS, self._MID_FIELDS) for row in rows
         ]
         self._personas_by_id = {persona.id: persona for persona in self._personas}
 

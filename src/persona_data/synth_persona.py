@@ -10,11 +10,13 @@ from typing import Any, Callable, Iterator, Literal, NamedTuple
 import orjson  # ~4x faster JSON parsing than stdlib
 
 # Bump when QAPair/parse logic changes so stale parse caches are ignored.
-_QA_CACHE_VERSION = 1
+_QA_CACHE_VERSION = 2
 
 BASELINE_PERSONA_ID = "baseline_assistant"
 BASELINE_PERSONA_NAME = "Assistant"
 _DEFAULT_ATTRIBUTE_EXCLUDE = {"first_name", "last_name"}
+
+
 class QuestionMeta(NamedTuple):
     topic_group_id: str | None
     question_sets: frozenset[str]
@@ -24,7 +26,8 @@ class QuestionMeta(NamedTuple):
 QuestionRegistry = dict[str, QuestionMeta]
 
 
-@dataclass
+# slots: ~788k instances per full QA load, so skipping __dict__ matters.
+@dataclass(slots=True)
 class QAPair:
     qid: str
     type: Literal["explicit", "implicit"]
@@ -43,7 +46,7 @@ class QAPair:
         return f"QAPair(qid={self.qid!r}, type={self.type!r}, item_type={self.item_type!r})"
 
 
-@dataclass
+@dataclass(slots=True)
 class Statement:
     sid: str
     category: str
@@ -466,6 +469,7 @@ class SynthPersonaDataset(PersonaDataset):
             for item in bank.get("items", [])
             if item.get("bank_id")
         }
+
         def load_attribute_schema() -> dict:
             try:
                 attribute_schema_path = hf_hub_download(

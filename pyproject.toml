@@ -1,6 +1,6 @@
 [project]
 name = "persona-data"
-version = "0.6.0"
+version = "0.7.0"
 description = "Shared dataset loading and prompt formatting for implicit-personalization projects"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,9 +8,13 @@ dependencies = [
     "huggingface-hub>=0.30.0",
     "orjson>=3.9.0",
     "pyarrow>=14.0.0",
-    "python-dotenv>=1.0.0",
     "torch>=2.0.0",
     "numpy>=1.24.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
 ]
 
 [build-system]

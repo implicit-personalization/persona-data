@@ -14,6 +14,8 @@
 
 The [Prompt formatting](prompts.md) page covers helpers for roleplay prompts and multiple-choice evaluation.
 
+The [Attribute swaps](templated.md) page covers single-attribute counterfactuals of the SynthPersona templated view (minimal prompt pairs for causal experiments).
+
 ## Shared conventions
 
 - Loaders download from Hugging Face with `hf_hub_download`, including sharded parquet sources.

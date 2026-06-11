@@ -33,6 +33,7 @@ from persona_data.synth_persona import (
     QAPair,
     SynthPersonaDataset,
 )
+from persona_data.templated import render_templated_view, swap_attribute
 
 # --------------------------------------------------------------------------- #
 # environment / prompts                                                       #
@@ -465,11 +466,19 @@ def test_persona_dataset_qa_filters_by_question_registry(tmp_path: Path):
 
     # qid-keyed metadata, and bank_id-keyed composing with type / question_set.
     assert qids(topic_group_id="work_identity_and_competence") == ["q2"]
-    assert qids(type="implicit", topic_group_id="religion_spirituality_and_meaning") == ["q4"]
-    assert qids(type="explicit", topic_group_id="demographics_and_background") == ["q1", "q5"]
+    assert qids(
+        type="implicit", topic_group_id="religion_spirituality_and_meaning"
+    ) == ["q4"]
+    assert qids(type="explicit", topic_group_id="demographics_and_background") == [
+        "q1",
+        "q5",
+    ]
     assert qids(item_type="mcq", question_set="qa_eval_v1") == ["q4"]
     # Filters intersect: a topic with no rows in that question_set is empty.
-    assert qids(topic_group_id="work_identity_and_competence", question_set="qa_eval_v1") == []
+    assert (
+        qids(topic_group_id="work_identity_and_competence", question_set="qa_eval_v1")
+        == []
+    )
 
 
 def test_persona_dataset_qa_metadata_filters_require_registry(tmp_path: Path):
@@ -555,6 +564,275 @@ def test_persona_dataset_sample_size_zero_is_empty(tmp_path: Path):
 
     assert len(ds) == 0
     assert list(ds) == []
+
+
+# --------------------------------------------------------------------------- #
+# Templated view rendering / attribute swaps                                  #
+# --------------------------------------------------------------------------- #
+
+
+def _templated_attrs(**overrides) -> dict:
+    attrs = {
+        "first_name": "Ethan",
+        "last_name": "Robinson",
+        "age": 25,
+        "sex": "Male",
+        "city": "Little Rock",
+        "state": "AR",
+        "born_in_us": "Yes",
+        "ethnicity": "American only",
+        "race": "White",
+        "hispanic_origin": "Not Hispanic",
+        "political_views": "Slightly liberal",
+        "party_identification": "Independent, close to democrat",
+        "marital_status": "Never married",
+        "work_status": "Working full time",
+        "highest_degree_received": "High school",
+        "religion": "Catholic",
+        "speak_other_language": "No",
+        "total_wealth": "Less than $5,000",
+        "residence_at_16": "West South Central",
+        "same_residence_since_16": "Different state",
+        "family_structure_at_16": "Lived with parents",
+        "family_income_at_16": "Average",
+        "fathers_highest_degree": "High school",
+        "mothers_highest_degree": "High school",
+        "mothers_work_history": "No",
+        "us_citizenship_status": "A U.S. citizen",
+        "street_address": "123 Elmwood Drive",  # not rendered in the view
+    }
+    attrs.update(overrides)
+    return attrs
+
+
+_TEMPLATED_SCHEMA = {
+    "persona_fields": {
+        "age": {"kind": "numeric"},
+        "sex": {
+            "kind": "binary",
+            "seed_values_sorted_by_count": [
+                {"value": "Female", "count": 541},
+                {"value": "Male", "count": 459},
+            ],
+        },
+        "speak_other_language": {
+            "kind": "binary",
+            "seed_values_sorted_by_count": [
+                {"value": "No", "count": 685},
+                {"value": "Yes", "count": 315},
+            ],
+        },
+        "born_in_us": {
+            "kind": "binary",
+            "seed_values_sorted_by_count": [
+                {"value": "Yes", "count": 846},
+                {"value": "No", "count": 154},
+            ],
+        },
+        "religion": {
+            "kind": "nominal",
+            "seed_values_sorted_by_count": [
+                {"value": "Protestant", "count": 376},
+                {"value": "None", "count": 303},
+                {"value": "Catholic", "count": 222},
+                {"value": "Jewish", "count": 13},
+            ],
+        },
+        "political_views": {
+            "kind": "ordinal",
+            "ordered_values": [
+                "Extremely liberal",
+                "Liberal",
+                "Slightly liberal",
+                "Moderate, middle of the road",
+                "Slightly conservative",
+                "Conservative",
+                "Extremely conservative",
+            ],
+        },
+        "city": {"kind": "nominal", "high_cardinality": True},
+    }
+}
+
+
+def _write_templated_fixture(tmp: Path, *, with_schema: bool = True) -> PersonaDataset:
+    attrs = _templated_attrs()
+    rows = [
+        {
+            "id": "t1",
+            "persona": attrs,
+            "templated_view": render_templated_view(attrs),
+            "biography_view": "BIO",
+            "statements_view": "SV",
+            "statements": [{"sid": "s1", "category": "c", "claim": "x"}],
+        },
+        {
+            "id": "stale",
+            "persona": _templated_attrs(first_name="Stale"),
+            "templated_view": "OUT OF DATE",
+            "biography_view": "BIO",
+        },
+    ]
+    personas_path = tmp / "personas.jsonl"
+    personas_path.write_text("\n".join(json.dumps(r) for r in rows) + "\n")
+    qa_path = tmp / "qa.jsonl"
+    qa_path.write_text("")
+    schema_path = None
+    if with_schema:
+        schema_path = tmp / "attribute_schema.json"
+        schema_path.write_text(json.dumps(_TEMPLATED_SCHEMA))
+    return PersonaDataset(personas_path, qa_path, attribute_schema_path=schema_path)
+
+
+def _changed_lines(a: str, b: str) -> list[tuple[str, str]]:
+    return [(x, y) for x, y in zip(a.splitlines(), b.splitlines()) if x != y]
+
+
+def test_render_templated_view_golden():
+    assert render_templated_view(_templated_attrs()) == (
+        "I am Ethan Robinson.\n"
+        "I am a 25-year-old male.\n"
+        "I live in Little Rock, AR.\n"
+        "I was born in the United States.\n"
+        "My ethnicity is American only.\n"
+        "My race is White.\n"
+        "My Hispanic origin is Not Hispanic.\n"
+        "My political views are Slightly liberal.\n"
+        "My party identification is Independent, close to democrat.\n"
+        "My marital status is Never married.\n"
+        "My current work status is Working full time.\n"
+        "My highest degree received is High school.\n"
+        "My religion is Catholic.\n"
+        "My answer to whether I speak another language is No.\n"
+        "My total wealth is Less than $5,000.\n"
+        "When I was 16, I lived in West South Central.\n"
+        "My answer to whether I have lived in the same place since age 16 is "
+        "Different state.\n"
+        "My family structure at age 16 was Lived with parents.\n"
+        "My family income at age 16 was Average.\n"
+        "My father's highest degree was High school.\n"
+        "My mother's highest degree was High school.\n"
+        "My mother's work history was No.\n"
+        "My U.S. citizenship status is A U.S. citizen."
+    )
+
+
+def test_render_templated_view_omits_religion_none():
+    view = render_templated_view(_templated_attrs(religion="None"))
+    assert "My religion is" not in view
+    assert len(view.splitlines()) == 22
+
+
+def test_swap_binary_defaults_to_opposite(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+    original, swapped = swap_attribute(ds, "t1", "speak_other_language")
+
+    assert original is ds.get_persona("t1")
+    assert original.persona["speak_other_language"] == "No"  # untouched
+    assert swapped.persona["speak_other_language"] == "Yes"
+    assert swapped.id == "t1__swap_speak_other_language"
+    assert swapped.biography_view == ""
+    assert swapped.statements_view == ""
+    assert swapped.statements == []
+    assert _changed_lines(original.templated_view, swapped.templated_view) == [
+        (
+            "My answer to whether I speak another language is No.",
+            "My answer to whether I speak another language is Yes.",
+        )
+    ]
+
+
+def test_swap_born_in_us_rephrases_sentence(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+    original, swapped = swap_attribute(ds, "t1", "born_in_us")
+
+    assert _changed_lines(original.templated_view, swapped.templated_view) == [
+        ("I was born in the United States.", "I was not born in the United States.")
+    ]
+
+
+def test_swap_sex_changes_composite_sentence(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+    original, swapped = swap_attribute(ds, "t1", "sex")
+
+    assert _changed_lines(original.templated_view, swapped.templated_view) == [
+        ("I am a 25-year-old male.", "I am a 25-year-old female.")
+    ]
+
+
+def test_swap_categorical_requires_and_validates_value(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="new_value is required"):
+        swap_attribute(ds, "t1", "religion")
+    with pytest.raises(ValueError, match="not in known values"):
+        swap_attribute(ds, "t1", "religion", "Jedi")
+
+    _, swapped = swap_attribute(ds, "t1", "religion", "Jewish")
+    assert _changed_lines(ds[0].templated_view, swapped.templated_view) == [
+        ("My religion is Catholic.", "My religion is Jewish.")
+    ]
+
+
+def test_swap_religion_to_none_drops_line(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+    original, swapped = swap_attribute(ds, "t1", "religion", "None")
+
+    assert "My religion is" not in swapped.templated_view
+    assert len(swapped.templated_view.splitlines()) == 22
+    assert len(original.templated_view.splitlines()) == 23
+
+
+def test_swap_ordinal_validates_against_ordered_values(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="not in known values"):
+        swap_attribute(ds, "t1", "political_views", "Anarchist")
+
+    _, swapped = swap_attribute(ds, "t1", "political_views", "Conservative")
+    assert "My political views are Conservative." in swapped.templated_view
+
+
+def test_swap_numeric_and_high_cardinality_skip_validation(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+
+    _, swapped = swap_attribute(ds, "t1", "age", 60)
+    assert "I am a 60-year-old male." in swapped.templated_view
+
+    _, swapped = swap_attribute(ds, "t1", "city", "Fayetteville")
+    assert "I live in Fayetteville, AR." in swapped.templated_view
+
+
+def test_swap_rejects_no_op_and_unrendered_attributes(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="leaves the view unchanged"):
+        swap_attribute(ds, "t1", "religion", "Catholic")
+    with pytest.raises(ValueError, match="leaves the view unchanged"):
+        swap_attribute(ds, "t1", "street_address", "456 Oak Lane")
+    with pytest.raises(ValueError, match="has no attribute"):
+        swap_attribute(ds, "t1", "favourite_color", "Blue")
+    with pytest.raises(KeyError):
+        swap_attribute(ds, "missing", "religion", "Jewish")
+
+
+def test_swap_rejects_stale_templated_view(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path)
+
+    with pytest.raises(ValueError, match="does not match the v4.0 template"):
+        swap_attribute(ds, "stale", "speak_other_language")
+
+
+def test_swap_without_schema_needs_explicit_value(tmp_path: Path):
+    ds = _write_templated_fixture(tmp_path, with_schema=False)
+
+    with pytest.raises(ValueError, match="new_value is required"):
+        swap_attribute(ds, "t1", "speak_other_language")
+
+    _, swapped = swap_attribute(ds, "t1", "speak_other_language", "Yes")
+    assert "My answer to whether I speak another language is Yes." in (
+        swapped.templated_view
+    )
 
 
 # --------------------------------------------------------------------------- #

@@ -18,3 +18,5 @@ artifacts_dir = get_artifacts_dir()
 | `set_seed(seed)` | Seeds Python `random`, NumPy, Torch CPU, CUDA when available, and MPS when available. |
 | `get_device()` | Returns `cuda`, then `mps`, then `cpu` based on local Torch availability. |
 | `get_artifacts_dir()` | Returns `Path(os.environ["ARTIFACTS_DIR"])`, or `Path("artifacts")` when the variable is unset. |
+
+Torch and NumPy are imported lazily inside `set_seed` / `get_device`, so importing this module (e.g. for `get_artifacts_dir`) stays cheap in data-only contexts.
